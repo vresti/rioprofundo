@@ -255,6 +255,14 @@ const SPONSOR = {
 
 const fmtHora = ts => new Date(ts).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
 const fmtFecha = ts => new Date(ts).toLocaleDateString('es-AR', { weekday:'short', day:'numeric', month:'short' });
+// Antigüedad legible de una medición respecto de "ahora" (ts del servidor)
+function haceCuanto(tDato, tAhora) {
+  const min = Math.round((tAhora - tDato) / 60000);
+  if (min < 2) return 'recién';
+  if (min < 60) return 'hace ' + min + ' min';
+  const h = Math.floor(min / 60), m = min % 60;
+  return 'hace ' + h + ' h' + (m ? ' ' + m + ' min' : '');
+}
 
 async function cargar() {
   try {
@@ -306,7 +314,8 @@ function render(d) {
       <div class="meta">
         <div class="hora">${fmtHora(horaActual)}</div>
         <div>${fmtFecha(horaActual)}</div>
-        <div>${d.estacion || 'San Fernando'}</div>
+        <div style="margin-top:4px;color:${(d.ts-horaActual)>3*3600000?'var(--ambar)':'var(--niebla)'}">última medición · ${haceCuanto(horaActual, d.ts)}</div>
+        <div style="opacity:.7">${d.estacion || 'San Fernando'}</div>
       </div>
     </div>
 
