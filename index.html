@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Río Profundo · Marea del Río de la Plata</title>
+<meta name="description" content="Marea astronómica y nivel real del Río de la Plata en San Fernando. Herramienta náutica de consulta.">
+
+<!-- ====================================================================
+     CABLE PRINCIPAL — pegá acá tu URL /exec del Apps Script
+     ==================================================================== -->
+<script>
+  const URL_GAS = 'https://script.google.com/macros/s/AKfycbxX-V91u8_huNtYnHfSK1XSwXkou75YAzWY5mO1EeGRYHe1I1rfUinYfdP8KkNyadeE/exec';
+  const REFRESH_MIN = 5;   // auto-refresco del tablero [minutos]
+</script>
+
+<style>
+  /* ---- Tipografía con carácter (cargada de Google Fonts) ---- */
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --abismo:   #06141f;   /* fondo más profundo */
+    --agua:     #0a2540;   /* azul carta náutica */
+    --agua-2:   #0e3354;
+    --cian:     #5fd4e6;   /* línea astronómica / acentos */
+    --espuma:   #eaf6f8;   /* texto claro */
+    --niebla:   #8fb2c4;   /* texto secundario */
+    --ambar:    #f2a93b;   /* anomalía positiva (sudestada) */
+    --rojo:     #e8556b;   /* peligro */
+    --verde:    #4fd1a5;   /* nivel bajo / bajante */
+    --linea:    rgba(143,178,196,.18);
+    --vidrio:   rgba(14,51,84,.55);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Spline Sans Mono', monospace;
+    background:
+      radial-gradient(ellipse 120% 80% at 50% -10%, var(--agua) 0%, var(--abismo) 70%),
+      var(--abismo);
+    background-attachment: fixed;
+    color: var(--espuma);
+    min-height: 100vh;
+    padding: clamp(14px, 3vw, 32px);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1000px; margin: 0 auto; }
+
+  /* ---- Encabezado ---- */
+  header { margin-bottom: clamp(18px, 3vw, 30px); }
+  .marca {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  }
+  .marca h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 900;
+    font-size: clamp(2rem, 7vw, 3.6rem);
+    line-height: .95;
+    letter-spacing: -.02em;
+    background: linear-gradient(180deg, var(--espuma), var(--cian));
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .marca .punto { color: var(--cian); -webkit-text-fill-color: var(--cian); }
+  .subtitulo {
+    color: var(--niebla);
+    font-size: clamp(.72rem, 2vw, .9rem);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    margin-top: 8px;
+  }
+
+  /* ---- Tarjeta principal (instrumento) ---- */
+  .panel {
+    background: var(--vidrio);
+    border: 1px solid var(--linea);
+    border-radius: 18px;
+    padding: clamp(16px, 3vw, 26px);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 30px 80px -40px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.04);
+  }
+
+  /* ---- Lectura grande del nivel actual ---- */
+  .ahora {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 18px; flex-wrap: wrap; margin-bottom: 22px;
+  }
+  .ahora .nivel { display: flex; align-items: baseline; gap: 10px; }
+  .ahora .nivel .valor {
+    font-family: 'Fraunces', serif;
+    font-weight: 900;
+    font-size: clamp(2.8rem, 11vw, 5rem);
+    line-height: .85;
+    letter-spacing: -.03em;
+  }
+  .ahora .nivel .unidad { font-size: clamp(1rem,3vw,1.4rem); color: var(--niebla); }
+  .ahora .meta { text-align: right; font-size: .8rem; color: var(--niebla); line-height: 1.7; }
+  .ahora .meta .hora { color: var(--espuma); font-size: 1rem; font-weight: 600; }
+
+  .estado-chip {
+    display: inline-block; padding: 4px 12px; border-radius: 999px;
+    font-size: .68rem; letter-spacing: .12em; text-transform: uppercase;
+    border: 1px solid var(--linea); color: var(--niebla);
+    margin-top: 6px;
+  }
+
+  /* ---- Lienzo de la curva ---- */
+  .grafico-cont { position: relative; width: 100%; }
+  canvas { width: 100%; height: auto; display: block; border-radius: 10px; }
+
+  /* ---- Leyenda ---- */
+  .leyenda {
+    display: flex; gap: 18px; flex-wrap: wrap;
+    margin-top: 16px; font-size: .74rem; color: var(--niebla);
+  }
+  .leyenda span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+  .swatch.dot { width: 9px; height: 9px; border-radius: 50%; }
+
+  /* ---- Fila de instrumentos (viento, etc.) ---- */
+  .instrumentos {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px; margin-top: 20px;
+  }
+  .instr {
+    background: rgba(6,20,31,.5); border: 1px solid var(--linea);
+    border-radius: 12px; padding: 14px 16px;
+  }
+  .instr .et { font-size: .66rem; letter-spacing: .12em; text-transform: uppercase; color: var(--niebla); }
+  .instr .vl { font-family:'Fraunces',serif; font-weight:600; font-size: 1.5rem; margin-top: 4px; }
+  .instr .sub { font-size: .72rem; color: var(--niebla); margin-top: 2px; }
+
+  /* brújula de viento */
+  .viento-box { display: flex; align-items: center; gap: 14px; }
+  .rosa { width: 56px; height: 56px; flex-shrink: 0; }
+  .rosa .flecha { transform-origin: 50% 50%; transition: transform .6s cubic-bezier(.2,.8,.2,1); }
+
+  /* ---- Estados de carga / error ---- */
+  .msg { text-align: center; color: var(--niebla); padding: 90px 10px; font-size: .9rem; letter-spacing: .04em; }
+  .msg.error { color: var(--rojo); }
+  .msg::before {
+    content: '~'; display: block; font-family: 'Fraunces', serif;
+    font-size: 3rem; color: var(--cian); opacity: .4; margin-bottom: 8px;
+    animation: ola 2.4s ease-in-out infinite;
+  }
+  @keyframes ola { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+
+  /* ---- Espacio publicitario (banner ancho de tercero) ---- */
+  .aviso {
+    position: relative;
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+    flex-wrap: wrap; text-decoration: none;
+    margin-top: clamp(22px, 4vw, 36px);
+    min-height: 92px; padding: 22px 24px;
+    background:
+      repeating-linear-gradient(45deg, rgba(143,178,196,.03) 0 10px, transparent 10px 20px),
+      var(--vidrio);
+    border: 1px dashed var(--linea);
+    border-radius: 14px;
+    transition: border-color .2s, background .2s;
+  }
+  .aviso:hover { border-color: var(--cian); }
+  .aviso.activo { border-style: solid; }
+  .aviso-tag {
+    font-size: .6rem; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--niebla); opacity: .6;
+    position: absolute; transform: translateY(-30px);
+  }
+  .aviso-cuerpo {
+    font-family: 'Fraunces', serif; font-weight: 600;
+    font-size: clamp(1rem, 3vw, 1.4rem); color: var(--niebla);
+    text-align: center;
+  }
+  .aviso.activo .aviso-cuerpo { color: var(--espuma); }
+  .aviso img { max-height: 64px; max-width: 100%; border-radius: 6px; }
+
+  footer {
+    text-align: center; color: var(--niebla); font-size: .7rem;
+    margin-top: 28px; letter-spacing: .08em;
+  }
+  footer a { color: var(--cian); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="marca">
+      <h1>Río Profundo<span class="punto">.</span></h1>
+    </div>
+    <div class="subtitulo">Marea y nivel del Río de la Plata · San Fernando</div>
+  </header>
+
+  <div class="panel">
+    <div id="contenido">
+      <div class="msg" id="cargando">Sondando el río…</div>
+    </div>
+  </div>
+
+  <!-- ESPACIO PUBLICITARIO — banner ancho de tercero (tipo aviso de diario).
+       Estante preparado para sponsors futuros: completá href, imagen y texto.
+       Para vender el espacio: cambiar SPONSOR en el <script> de abajo. -->
+  <a class="aviso" id="aviso" href="#" target="_blank" rel="noopener">
+    <span class="aviso-tag">Espacio publicitario</span>
+    <span class="aviso-cuerpo" id="aviso-cuerpo">Disponible para sponsors</span>
+  </a>
+
+  <footer>
+    rioprofundo.com · datos: INA (a5) + StormGlass + Open-Meteo ·
+    actualizado cada <span id="ref-min">5</span> min
+  </footer>
+
+</div>
+
+<script>
+// ============================================================================
+//  RÍO PROFUNDO — frontend del tablero de marea
+//  Consume el JSON público del Apps Script (solo lectura) y dibuja:
+//   - curva de marea astronómica (cian)
+//   - nivel real observado (puntos blancos)
+//   - relleno de ANOMALÍA (ámbar si real>astron, verde si real<astron)
+//   - marcador "ahora" + brújula de viento
+// ============================================================================
+
+document.getElementById('ref-min').textContent = REFRESH_MIN;
+
+// ============================================================================
+//  ESPACIO PUBLICITARIO — para vender a un sponsor, completá este objeto.
+//  Si SPONSOR.activo = false, queda el cartel "Disponible para sponsors".
+//  - texto:  lo que se muestra (o usá 'imagen' para un banner gráfico)
+//  - url:    a dónde lleva el clic
+//  - imagen: (opcional) URL de una imagen; si está, reemplaza al texto
+// ============================================================================
+const SPONSOR = {
+  activo: false,
+  texto:  'Tu marca acá',
+  url:    '#',
+  imagen: ''   // ej: 'https://.../banner.png'
+};
+
+(function montarAviso() {
+  const a = document.getElementById('aviso');
+  const cuerpo = document.getElementById('aviso-cuerpo');
+  if (!SPONSOR.activo) return;               // queda el cartel "disponible"
+  a.classList.add('activo');
+  a.href = SPONSOR.url || '#';
+  if (SPONSOR.imagen) {
+    cuerpo.innerHTML = '<img src="' + SPONSOR.imagen + '" alt="' + (SPONSOR.texto||'') + '">';
+  } else if (SPONSOR.texto) {
+    cuerpo.textContent = SPONSOR.texto;
+  }
+})();
+
+const fmtHora = ts => new Date(ts).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
+const fmtFecha = ts => new Date(ts).toLocaleDateString('es-AR', { weekday:'short', day:'numeric', month:'short' });
+
+async function cargar() {
+  try {
+    const r = await fetch(URL_GAS, { redirect: 'follow' });
+    const data = await r.json();
+    if (!data || data.error || !data.ok) throw new Error('respuesta inválida');
+    render(data);
+  } catch (e) {
+    document.getElementById('contenido').innerHTML =
+      '<div class="msg error">No se pudo leer el río ahora mismo.<br>Reintentando en un momento…</div>';
+    setTimeout(cargar, 30000); // reintento a los 30 s
+  }
+}
+
+function render(d) {
+  // ---- nivel actual: último punto real, o la astronómica en "ahora" ----
+  const real = (d.real || []).filter(p => p.h != null);
+  const ultimo = real.length ? real[real.length - 1] : null;
+  const nivelActual = ultimo ? ultimo.h : interpEnAhora(d);
+  const horaActual = ultimo ? ultimo.t : d.ts;
+
+  // anomalía = real - astronómica en el mismo instante
+  const astEnUltimo = astronEn(d, horaActual);
+  const anomalia = (ultimo && astEnUltimo != null) ? (ultimo.h - astEnUltimo) : null;
+
+  const v = d.viento || {};
+  const cuadColor = v.cuadrante === 'SE' ? 'var(--rojo)'
+                  : v.cuadrante === 'NO' ? 'var(--verde)' : 'var(--niebla)';
+  const cuadTxt = v.cuadrante === 'SE' ? 'Sudestada (SE)'
+                : v.cuadrante === 'NO' ? 'Bajante (NO)' : 'Sin componente crítica';
+
+  let anomTxt = '';
+  if (anomalia != null) {
+    const signo = anomalia >= 0 ? '+' : '';
+    const col = anomalia >= 0.05 ? 'var(--ambar)' : (anomalia <= -0.05 ? 'var(--verde)' : 'var(--niebla)');
+    anomTxt = `<span class="estado-chip" style="border-color:${col};color:${col}">`
+            + `anomalía ${signo}${anomalia.toFixed(2)} m</span>`;
+  }
+
+  document.getElementById('contenido').innerHTML = `
+    <div class="ahora">
+      <div>
+        <div class="nivel">
+          <span class="valor">${nivelActual != null ? nivelActual.toFixed(2) : '—'}</span>
+          <span class="unidad">m</span>
+        </div>
+        ${anomTxt}
+      </div>
+      <div class="meta">
+        <div class="hora">${fmtHora(horaActual)}</div>
+        <div>${fmtFecha(horaActual)}</div>
+        <div>${d.estacion || 'San Fernando'}</div>
+      </div>
+    </div>
+
+    <div class="grafico-cont">
+      <canvas id="lienzo" width="1000" height="440"></canvas>
+    </div>
+
+    <div class="leyenda">
+      <span><i class="swatch" style="background:var(--cian)"></i> Marea astronómica</span>
+      <span><i class="swatch dot" style="background:var(--espuma)"></i> Nivel real (INA)</span>
+      <span><i class="swatch" style="background:var(--ambar)"></i> Agua de más</span>
+      <span><i class="swatch" style="background:var(--verde)"></i> Agua de menos</span>
+    </div>
+
+    <div class="instrumentos">
+      <div class="instr">
+        <div class="et">Viento</div>
+        <div class="viento-box">
+          <svg class="rosa" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="46" fill="none" stroke="var(--linea)" stroke-width="2"/>
+            <text x="50" y="14" fill="var(--niebla)" font-size="11" text-anchor="middle">N</text>
+            <g class="flecha" style="transform: rotate(${(v.theta||0)}deg)">
+              <polygon points="50,18 44,54 50,48 56,54" fill="${cuadColor}"/>
+              <polygon points="50,82 44,46 50,52 56,46" fill="${cuadColor}" opacity=".35"/>
+            </g>
+          </svg>
+          <div>
+            <div class="vl">${(v.v_kmh!=null?v.v_kmh:'—')} <span style="font-size:.8rem;color:var(--niebla)">km/h</span></div>
+            <div class="sub" style="color:${cuadColor}">${cuadTxt}</div>
+          </div>
+        </div>
+      </div>
+      <div class="instr">
+        <div class="et">Ráfaga</div>
+        <div class="vl">${(v.rafaga_kmh!=null?v.rafaga_kmh:'—')}<span style="font-size:.8rem;color:var(--niebla)"> km/h</span></div>
+        <div class="sub">de dónde sopla: ${(v.theta!=null?v.theta+'°':'—')}</div>
+      </div>
+      <div class="instr">
+        <div class="et">Presión</div>
+        <div class="vl">${(v.presion!=null?v.presion:'—')}<span style="font-size:.8rem;color:var(--niebla)"> hPa</span></div>
+        <div class="sub">${v.valido===false?'dato de viento no disponible':'atmosférica'}</div>
+      </div>
+    </div>
+  `;
+
+  dibujar(d, horaActual, nivelActual);
+}
+
+// ---- interpolación de la curva astronómica en un instante (para anomalía) ----
+function astronEn(d, t) {
+  const m = d.marea || [];
+  if (!m.length) return null;
+  for (let i = 1; i < m.length; i++) {
+    if (m[i].t >= t) {
+      const a = m[i-1], b = m[i];
+      if (a.h == null || b.h == null) return b.h != null ? b.h : a.h;
+      const x = (t - a.t) / (b.t - a.t);
+      return a.h + (b.h - a.h) * x;
+    }
+  }
+  return m[m.length-1].h;
+}
+function interpEnAhora(d) { return astronEn(d, d.ts); }
+
+// ============================================================================
+//  DIBUJO en canvas — curva, anomalía, real, marcador "ahora"
+// ============================================================================
+function dibujar(d, horaActual, nivelActual) {
+  const cv = document.getElementById('lienzo');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const padL = 46, padR = 16, padT = 20, padB = 34;
+  const gw = W - padL - padR, gh = H - padT - padB;
+
+  ctx.clearRect(0,0,W,H);
+
+  const marea = (d.marea||[]).filter(p => p.h != null);
+  const real  = (d.real||[]).filter(p => p.h != null);
+  if (!marea.length) return;
+
+  // rangos
+  const t0 = marea[0].t, t1 = marea[marea.length-1].t;
+  let hMin = Infinity, hMax = -Infinity;
+  marea.concat(real).forEach(p => { if(p.h<hMin)hMin=p.h; if(p.h>hMax)hMax=p.h; });
+  const margen = (hMax - hMin) * 0.15 || 0.3;
+  hMin -= margen; hMax += margen;
+
+  const X = t => padL + (t - t0)/(t1 - t0) * gw;
+  const Y = h => padT + (1 - (h - hMin)/(hMax - hMin)) * gh;
+
+  // ---- grilla horizontal + etiquetas de altura ----
+  ctx.font = '11px "Spline Sans Mono", monospace';
+  ctx.textBaseline = 'middle';
+  const pasos = 5;
+  for (let i=0; i<=pasos; i++) {
+    const h = hMin + (hMax-hMin)*i/pasos;
+    const y = Y(h);
+    ctx.strokeStyle = 'rgba(143,178,196,.10)';
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); ctx.stroke();
+    ctx.fillStyle = '#8fb2c4';
+    ctx.textAlign = 'right';
+    ctx.fillText(h.toFixed(1), padL-8, y);
+  }
+
+  // ---- marcas de tiempo (cada 6 h) ----
+  ctx.textAlign = 'center';
+  for (let t = Math.ceil(t0/(6*3600000))*6*3600000; t <= t1; t += 6*3600000) {
+    const x = X(t);
+    ctx.strokeStyle = 'rgba(143,178,196,.10)';
+    ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,H-padB); ctx.stroke();
+    ctx.fillStyle = '#8fb2c4';
+    const hh = new Date(t).getHours().toString().padStart(2,'0');
+    ctx.fillText(hh+'h', x, H-padB+16);
+  }
+
+  // ---- RELLENO de anomalía: entre real y astronómica ----
+  // Para cada punto real, comparo con la astronómica interpolada y pinto.
+  if (real.length > 1) {
+    for (let i=0; i<real.length-1; i++) {
+      const p = real[i], q = real[i+1];
+      const ap = astronEn(d, p.t), aq = astronEn(d, q.t);
+      if (ap==null||aq==null) continue;
+      const subePos = (p.h - ap) >= 0;
+      ctx.beginPath();
+      ctx.moveTo(X(p.t), Y(p.h));
+      ctx.lineTo(X(q.t), Y(q.h));
+      ctx.lineTo(X(q.t), Y(aq));
+      ctx.lineTo(X(p.t), Y(ap));
+      ctx.closePath();
+      ctx.fillStyle = subePos ? 'rgba(242,169,59,.22)' : 'rgba(79,209,165,.20)';
+      ctx.fill();
+    }
+  }
+
+  // ---- curva ASTRONÓMICA (cian, suave) ----
+  ctx.beginPath();
+  marea.forEach((p,i) => { const x=X(p.t), y=Y(p.h); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+  ctx.strokeStyle = '#5fd4e6';
+  ctx.lineWidth = 2.4;
+  ctx.shadowColor = 'rgba(95,212,230,.5)'; ctx.shadowBlur = 8;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // ---- nivel REAL (línea blanca + puntos) ----
+  if (real.length) {
+    ctx.beginPath();
+    real.forEach((p,i) => { const x=X(p.t), y=Y(p.h); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.strokeStyle = 'rgba(234,246,248,.9)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    real.forEach(p => {
+      ctx.beginPath(); ctx.arc(X(p.t), Y(p.h), 2.4, 0, 7); ctx.fillStyle='#eaf6f8'; ctx.fill();
+    });
+  }
+
+  // ---- marcador AHORA ----
+  const xa = X(d.ts);
+  ctx.strokeStyle = 'rgba(242,169,59,.7)';
+  ctx.lineWidth = 1.4;
+  ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(xa,padT); ctx.lineTo(xa,H-padB); ctx.stroke();
+  ctx.setLineDash([]);
+  if (nivelActual != null) {
+    ctx.beginPath(); ctx.arc(xa, Y(nivelActual), 5, 0, 7);
+    ctx.fillStyle = '#f2a93b'; ctx.fill();
+    ctx.strokeStyle = '#06141f'; ctx.lineWidth = 2; ctx.stroke();
+  }
+  ctx.fillStyle = '#f2a93b';
+  ctx.textAlign = 'center';
+  ctx.font = '600 11px "Spline Sans Mono", monospace';
+  ctx.fillText('ahora', xa, padT-6);
+}
+
+cargar();
+setInterval(cargar, REFRESH_MIN * 60 * 1000);
+</script>
+</body>
+</html>
