@@ -99,11 +99,9 @@
   .ahora .meta { text-align: right; font-size: .8rem; color: var(--niebla); line-height: 1.7; }
   .ahora .meta .hora { color: var(--espuma); font-size: 1rem; font-weight: 600; }
 
-  .estado-chip {
-    display: inline-block; padding: 4px 12px; border-radius: 999px;
-    font-size: .68rem; letter-spacing: .12em; text-transform: uppercase;
-    border: 1px solid var(--linea); color: var(--niebla);
-    margin-top: 6px;
+  .comparacion {
+    margin-top: 10px; font-size: clamp(.82rem, 2.4vw, 1rem);
+    font-weight: 500; letter-spacing: .01em;
   }
 
   /* ---- Lienzo de la curva ---- */
@@ -253,7 +251,7 @@ const SPONSOR = {
   }
 })();
 
-const fmtHora = ts => new Date(ts).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
+const fmtHora = ts => new Date(ts).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false });
 const fmtFecha = ts => new Date(ts).toLocaleDateString('es-AR', { weekday:'short', day:'numeric', month:'short' });
 // Antigüedad legible de una medición respecto de "ahora" (ts del servidor)
 function haceCuanto(tDato, tAhora) {
@@ -284,23 +282,25 @@ function render(d) {
   const nivelActual = ultimo ? ultimo.h : interpEnAhora(d);
   const horaActual = ultimo ? ultimo.t : d.ts;
 
-  // anomalía = real - astronómica en el mismo instante
-  const astEnUltimo = astronEn(d, horaActual);
-  const anomalia = (ultimo && astEnUltimo != null) ? (ultimo.h - astEnUltimo) : null;
+  // comparación clara: cuánto está el río por encima/debajo de lo que la marea esperaba
+  // (se evalúa en la hora del dato real, no en "ahora", para no comparar instantes distintos)
+  const astEnDato = astronEn(d, horaActual);
+  const dif = (ultimo && astEnDato != null) ? (ultimo.h - astEnDato) : null;
+  let compTxt = '';
+  if (dif != null && Math.abs(dif) >= 0.05) {
+    const palabra = dif < 0 ? 'por debajo' : 'por encima';
+    const col = dif < 0 ? 'var(--verde)' : 'var(--ambar)';
+    compTxt = `<div class="comparacion" style="color:${col}">`
+            + `Río ${Math.abs(dif).toFixed(2)} m ${palabra} de la marea esperada</div>`;
+  } else if (dif != null) {
+    compTxt = `<div class="comparacion" style="color:var(--niebla)">Río en su nivel de marea</div>`;
+  }
 
   const v = d.viento || {};
   const cuadColor = v.cuadrante === 'SE' ? 'var(--rojo)'
                   : v.cuadrante === 'NO' ? 'var(--verde)' : 'var(--niebla)';
   const cuadTxt = v.cuadrante === 'SE' ? 'Sudestada (SE)'
                 : v.cuadrante === 'NO' ? 'Bajante (NO)' : 'Sin componente crítica';
-
-  let anomTxt = '';
-  if (anomalia != null) {
-    const signo = anomalia >= 0 ? '+' : '';
-    const col = anomalia >= 0.05 ? 'var(--ambar)' : (anomalia <= -0.05 ? 'var(--verde)' : 'var(--niebla)');
-    anomTxt = `<span class="estado-chip" style="border-color:${col};color:${col}">`
-            + `anomalía ${signo}${anomalia.toFixed(2)} m</span>`;
-  }
 
   document.getElementById('contenido').innerHTML = `
     <div class="ahora">
@@ -309,12 +309,12 @@ function render(d) {
           <span class="valor">${nivelActual != null ? nivelActual.toFixed(2) : '—'}</span>
           <span class="unidad">m</span>
         </div>
-        ${anomTxt}
+        ${compTxt}
       </div>
       <div class="meta">
-        <div class="hora">${fmtHora(horaActual)}</div>
+        <div class="hora">${fmtHora(horaActual)} hs</div>
         <div>${fmtFecha(horaActual)}</div>
-        <div style="margin-top:4px;color:${(d.ts-horaActual)>3*3600000?'var(--ambar)':'var(--niebla)'}">última medición · ${haceCuanto(horaActual, d.ts)}</div>
+        <div style="margin-top:4px;color:${(d.ts-horaActual)>3*3600000?'var(--ambar)':'var(--niebla)'}">medido · ${haceCuanto(horaActual, d.ts)}</div>
         <div style="opacity:.7">${d.estacion || 'San Fernando'}</div>
       </div>
     </div>
@@ -476,22 +476,44 @@ function dibujar(d, horaActual, nivelActual) {
     });
   }
 
-  // ---- marcador AHORA ----
+  // ---- línea vertical "ahora" (referencia de tiempo presente) ----
   const xa = X(d.ts);
-  ctx.strokeStyle = 'rgba(242,169,59,.7)';
-  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = 'rgba(242,169,59,.5)';
+  ctx.lineWidth = 1.2;
   ctx.setLineDash([4,4]);
   ctx.beginPath(); ctx.moveTo(xa,padT); ctx.lineTo(xa,H-padB); ctx.stroke();
   ctx.setLineDash([]);
-  if (nivelActual != null) {
-    ctx.beginPath(); ctx.arc(xa, Y(nivelActual), 5, 0, 7);
-    ctx.fillStyle = '#f2a93b'; ctx.fill();
-    ctx.strokeStyle = '#06141f'; ctx.lineWidth = 2; ctx.stroke();
-  }
-  ctx.fillStyle = '#f2a93b';
+  ctx.fillStyle = 'rgba(242,169,59,.8)';
   ctx.textAlign = 'center';
   ctx.font = '600 11px "Spline Sans Mono", monospace';
   ctx.fillText('ahora', xa, padT-6);
+
+  // ---- nivel medido: punto en SU hora real + línea horizontal con etiqueta ----
+  if (nivelActual != null && horaActual != null) {
+    const xm = X(horaActual);   // x en la hora REAL del dato (no en "ahora")
+    const ym = Y(nivelActual);
+
+    // línea horizontal punteada al nivel medido
+    ctx.strokeStyle = 'rgba(234,246,248,.45)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3,5]);
+    ctx.beginPath(); ctx.moveTo(padL, ym); ctx.lineTo(W-padR, ym); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // etiqueta "nivel medido" a la derecha
+    ctx.fillStyle = '#eaf6f8';
+    ctx.textAlign = 'right';
+    ctx.font = '600 10px "Spline Sans Mono", monospace';
+    ctx.fillText('nivel medido ' + nivelActual.toFixed(2) + ' m', W-padR-2, ym-7);
+
+    // punto grande en la hora real
+    ctx.beginPath(); ctx.arc(xm, ym, 6.5, 0, 7);
+    ctx.fillStyle = '#f2a93b'; ctx.fill();
+    ctx.strokeStyle = '#06141f'; ctx.lineWidth = 2.5; ctx.stroke();
+    // halo suave
+    ctx.beginPath(); ctx.arc(xm, ym, 11, 0, 7);
+    ctx.strokeStyle = 'rgba(242,169,59,.35)'; ctx.lineWidth = 1.5; ctx.stroke();
+  }
 }
 
 cargar();
