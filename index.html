@@ -353,30 +353,22 @@ function render(d) {
   const nivelActual = ultimo ? ultimo.h : interpEnAhora(d);
   const horaActual = ultimo ? ultimo.t : d.ts;
 
-  // comparación clara: cuánto está el río por encima/debajo de lo que la marea esperaba
-  // (se evalúa en la hora del dato real, no en "ahora", para no comparar instantes distintos)
+  // diferencia río vs marea esperada en la hora del dato (la usamos para el
+  // "calculado ahora" y para el tramo proyectado del gráfico).
   const astEnDato = astronEn(d, horaActual);
   const dif = (ultimo && astEnDato != null) ? (ultimo.h - astEnDato) : null;
-  let compTxt = '';
-  if (dif != null && Math.abs(dif) >= 0.05) {
-    const palabra = dif < 0 ? 'por debajo' : 'por encima';
-    const col = dif < 0 ? 'var(--verde)' : 'var(--ambar)';
-    compTxt = `<div class="comparacion" style="color:${col}">`
-            + `Río ${Math.abs(dif).toFixed(2)} m ${palabra} de la marea esperada</div>`;
-  } else if (dif != null) {
-    compTxt = `<div class="comparacion" style="color:var(--niebla)">Río en su nivel de marea</div>`;
-  }
 
   // ESTIMADO AHORA: marea astronómica de ahora + última anomalía observada.
   // Solo si el dato medido es reciente (< 3 h); si no, el viento pudo cambiar
   // y la proyección dejaría de ser confiable -> no estimamos.
   const VIGENCIA_MS = 3 * 3600 * 1000;
   let estimTxt = '';
+  let estimAhora = null;
   const datoFresco = ultimo && (d.ts - horaActual) <= VIGENCIA_MS;
   if (datoFresco && dif != null) {
     const astAhora = astronEn(d, d.ts);
     if (astAhora != null) {
-      const estimAhora = astAhora + dif;   // marea de ahora + anomalía vigente
+      estimAhora = astAhora + dif;   // marea de ahora + anomalía vigente
       estimTxt = `<div class="estimado">calculado ahora · <b>~${estimAhora.toFixed(2)} m</b></div>`;
     }
   }
@@ -394,14 +386,12 @@ function render(d) {
           <span class="valor">${nivelActual != null ? nivelActual.toFixed(2) : '—'}</span>
           <span class="unidad">m</span>
         </div>
-        ${compTxt}
         ${estimTxt}
       </div>
       <div class="meta">
-        <div class="hora">${fmtHora(horaActual)} hs</div>
+        <div class="hora">Medido a las ${fmtHora(horaActual)} hs</div>
         <div>${fmtFecha(horaActual)}</div>
-        <div style="margin-top:4px;color:${(d.ts-horaActual)>3*3600000?'var(--ambar)':'var(--niebla)'}">medido · ${haceCuanto(horaActual, d.ts)}</div>
-        <div style="opacity:.7">${d.estacion || 'San Fernando'}</div>
+        <div style="margin-top:4px;color:${(d.ts-horaActual)>3*3600000?'var(--ambar)':'var(--niebla)'}">hace ${haceCuanto(horaActual, d.ts).replace(/^hace /,'')}</div>
       </div>
     </div>
 
@@ -412,8 +402,7 @@ function render(d) {
     <div class="leyenda">
       <span><i class="swatch" style="background:var(--cian)"></i> Marea astronómica</span>
       <span><i class="swatch dot" style="background:var(--espuma)"></i> Nivel real (INA)</span>
-      <span><i class="swatch" style="background:var(--ambar)"></i> Agua de más</span>
-      <span><i class="swatch" style="background:var(--verde)"></i> Agua de menos</span>
+      <span><i class="swatch" style="background:var(--ambar);border-bottom:2px dotted var(--ambar);background:none;height:0"></i> Proyección a ahora</span>
     </div>
 
     <div class="instrumentos">
@@ -453,7 +442,7 @@ function render(d) {
     </div>
   `;
 
-  dibujar(d, horaActual, nivelActual);
+  dibujar(d, horaActual, nivelActual, estimAhora);
 }
 
 // ---- interpolación de la curva astronómica en un instante (para anomalía) ----
@@ -475,7 +464,7 @@ function interpEnAhora(d) { return astronEn(d, d.ts); }
 // ============================================================================
 //  DIBUJO en canvas — curva, anomalía, real, marcador "ahora"
 // ============================================================================
-function dibujar(d, horaActual, nivelActual) {
+function dibujar(d, horaActual, nivelActual, estimAhora) {
   const cv = document.getElementById('lienzo');
   const ctx = cv.getContext('2d');
   const W = cv.width, H = cv.height;
@@ -523,25 +512,6 @@ function dibujar(d, horaActual, nivelActual) {
     ctx.fillText(hh+'h', x, H-padB+16);
   }
 
-  // ---- RELLENO de anomalía: entre real y astronómica ----
-  // Para cada punto real, comparo con la astronómica interpolada y pinto.
-  if (real.length > 1) {
-    for (let i=0; i<real.length-1; i++) {
-      const p = real[i], q = real[i+1];
-      const ap = astronEn(d, p.t), aq = astronEn(d, q.t);
-      if (ap==null||aq==null) continue;
-      const subePos = (p.h - ap) >= 0;
-      ctx.beginPath();
-      ctx.moveTo(X(p.t), Y(p.h));
-      ctx.lineTo(X(q.t), Y(q.h));
-      ctx.lineTo(X(q.t), Y(aq));
-      ctx.lineTo(X(p.t), Y(ap));
-      ctx.closePath();
-      ctx.fillStyle = subePos ? 'rgba(242,169,59,.22)' : 'rgba(79,209,165,.20)';
-      ctx.fill();
-    }
-  }
-
   // ---- curva ASTRONÓMICA (cian, suave) ----
   ctx.beginPath();
   marea.forEach((p,i) => { const x=X(p.t), y=Y(p.h); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
@@ -561,6 +531,34 @@ function dibujar(d, horaActual, nivelActual) {
     real.forEach(p => {
       ctx.beginPath(); ctx.arc(X(p.t), Y(p.h), 2.4, 0, 7); ctx.fillStyle='#eaf6f8'; ctx.fill();
     });
+  }
+
+  // ---- TRAMO PROYECTADO: del último dato real al "ahora", siguiendo la
+  // forma de la marea (astronómica + anomalía vigente). Punteado naranja =
+  // "esto es proyección, no medición". Solo si hay estimación válida (<3h). ----
+  if (estimAhora != null && horaActual != null && real.length) {
+    const ult = real[real.length - 1];
+    const difVig = ult.h - astronEn(d, ult.t);   // anomalía que mantenemos
+    ctx.beginPath();
+    let primero = true;
+    // dibujamos punto a punto desde el último real hasta ahora, paso 15 min
+    for (let t = ult.t; t <= d.ts; t += 15 * 60 * 1000) {
+      const ast = astronEn(d, t);
+      if (ast == null) continue;
+      const hProj = ast + difVig;               // sinusoide desplazada por la anomalía
+      const x = X(t), y = Y(hProj);
+      if (primero) { ctx.moveTo(x, y); primero = false; } else { ctx.lineTo(x, y); }
+    }
+    // aseguramos terminar exactamente en (ahora, estimAhora)
+    ctx.lineTo(X(d.ts), Y(estimAhora));
+    ctx.strokeStyle = '#f2a93b';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // punto al final (nivel calculado ahora)
+    ctx.beginPath(); ctx.arc(X(d.ts), Y(estimAhora), 4, 0, 7);
+    ctx.fillStyle = '#f2a93b'; ctx.fill();
   }
 
   // ---- línea vertical "ahora" (referencia de tiempo presente) ----
