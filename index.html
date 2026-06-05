@@ -103,6 +103,11 @@
     margin-top: 10px; font-size: clamp(.82rem, 2.4vw, 1rem);
     font-weight: 500; letter-spacing: .01em;
   }
+  .estimado {
+    margin-top: 6px; font-size: .8rem; color: var(--cian);
+    letter-spacing: .04em; opacity: .9;
+  }
+  .estimado b { font-weight: 600; }
 
   /* ---- Lienzo de la curva ---- */
   .grafico-cont { position: relative; width: 100%; }
@@ -261,6 +266,11 @@ function haceCuanto(tDato, tAhora) {
   const h = Math.floor(min / 60), m = min % 60;
   return 'hace ' + h + ' h' + (m ? ' ' + m + ' min' : '');
 }
+// Grados meteorológicos (de dónde viene) -> rumbo náutico
+function rumbo(theta) {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
+  return dirs[Math.round((theta % 360) / 22.5) % 16];
+}
 
 async function cargar() {
   try {
@@ -296,6 +306,20 @@ function render(d) {
     compTxt = `<div class="comparacion" style="color:var(--niebla)">Río en su nivel de marea</div>`;
   }
 
+  // ESTIMADO AHORA: marea astronómica de ahora + última anomalía observada.
+  // Solo si el dato medido es reciente (< 3 h); si no, el viento pudo cambiar
+  // y la proyección dejaría de ser confiable -> no estimamos.
+  const VIGENCIA_MS = 3 * 3600 * 1000;
+  let estimTxt = '';
+  const datoFresco = ultimo && (d.ts - horaActual) <= VIGENCIA_MS;
+  if (datoFresco && dif != null) {
+    const astAhora = astronEn(d, d.ts);
+    if (astAhora != null) {
+      const estimAhora = astAhora + dif;   // marea de ahora + anomalía vigente
+      estimTxt = `<div class="estimado">calculado ahora · <b>~${estimAhora.toFixed(2)} m</b></div>`;
+    }
+  }
+
   const v = d.viento || {};
   const cuadColor = v.cuadrante === 'SE' ? 'var(--rojo)'
                   : v.cuadrante === 'NO' ? 'var(--verde)' : 'var(--niebla)';
@@ -310,6 +334,7 @@ function render(d) {
           <span class="unidad">m</span>
         </div>
         ${compTxt}
+        ${estimTxt}
       </div>
       <div class="meta">
         <div class="hora">${fmtHora(horaActual)} hs</div>
@@ -350,13 +375,14 @@ function render(d) {
           <div>
             <div class="vl">${(v.v_kmh!=null?v.v_kmh:'—')} <span style="font-size:.8rem;color:var(--niebla)">km/h</span></div>
             <div class="sub" style="color:${cuadColor}">${cuadTxt}</div>
+            <div class="sub">del ${(v.theta!=null?rumbo(v.theta)+' · '+v.theta+'°':'—')}</div>
           </div>
         </div>
       </div>
       <div class="instr">
         <div class="et">Ráfaga</div>
         <div class="vl">${(v.rafaga_kmh!=null?v.rafaga_kmh:'—')}<span style="font-size:.8rem;color:var(--niebla)"> km/h</span></div>
-        <div class="sub">de dónde sopla: ${(v.theta!=null?v.theta+'°':'—')}</div>
+        <div class="sub">máxima reciente</div>
       </div>
       <div class="instr">
         <div class="et">Presión</div>
