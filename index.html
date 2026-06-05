@@ -3,9 +3,43 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Río Profundo · Marea del Río de la Plata</title>
-<meta name="description" content="Marea astronómica y nivel real del Río de la Plata en San Fernando. Herramienta náutica de consulta.">
+<title>Río Profundo · Marea del Río de la Plata en San Fernando</title>
+<meta name="description" content="Marea, nivel y viento del Río de la Plata en San Fernando, en tiempo real. Para navegantes y vecinos de la costa: alturas, sudestada, bajante y pronóstico de marea astronómica.">
+<meta name="keywords" content="marea río de la plata, nivel del río san fernando, sudestada, bajante, marea hoy, marea astronómica, altura del río, viento san fernando, delta, navegación, calado, río de la plata tiempo real">
+<meta name="author" content="rioprofundo.com">
+<link rel="canonical" href="https://rioprofundo.com/">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#06141f">
 
+<!-- Open Graph (WhatsApp, Facebook, LinkedIn) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Río Profundo">
+<meta property="og:title" content="Río Profundo · Marea del Río de la Plata">
+<meta property="og:description" content="Marea, nivel y viento del Río de la Plata en San Fernando, en tiempo real. Para navegantes y vecinos de la costa.">
+<meta property="og:url" content="https://rioprofundo.com/">
+<meta property="og:image" content="https://rioprofundo.com/og.svg">
+<meta property="og:locale" content="es_AR">
+
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Río Profundo · Marea del Río de la Plata">
+<meta name="twitter:description" content="Marea, nivel y viento del Río de la Plata en San Fernando, en tiempo real.">
+<meta name="twitter:image" content="https://rioprofundo.com/og.svg">
+
+<!-- Datos estructurados (Google) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Río Profundo",
+  "url": "https://rioprofundo.com/",
+  "description": "Marea, nivel y viento del Río de la Plata en San Fernando, en tiempo real.",
+  "applicationCategory": "Utility",
+  "operatingSystem": "Web",
+  "inLanguage": "es-AR",
+  "isAccessibleForFree": true
+}
+</script>
 <!-- ====================================================================
      CABLE PRINCIPAL — pegá acá tu URL /exec del Apps Script
      ==================================================================== -->
@@ -181,6 +215,21 @@
   .aviso.activo .aviso-cuerpo { color: var(--espuma); }
   .aviso img { max-height: 64px; max-width: 100%; border-radius: 6px; }
 
+  /* ---- Compartir / QR ---- */
+  .compartir {
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    justify-content: center;
+    margin-top: clamp(22px, 4vw, 34px); padding: 20px 24px;
+    background: var(--vidrio); border: 1px solid var(--linea); border-radius: 14px;
+  }
+  .compartir .qr {
+    width: 96px; height: 96px; border-radius: 8px; flex-shrink: 0;
+    background: var(--espuma); padding: 6px;
+  }
+  .compartir-txt { max-width: 280px; }
+  .compartir-t { font-family:'Fraunces',serif; font-weight:600; font-size:1.2rem; color:var(--espuma); }
+  .compartir-s { font-size:.8rem; color:var(--niebla); margin-top:4px; line-height:1.5; }
+
   footer {
     text-align: center; color: var(--niebla); font-size: .7rem;
     margin-top: 28px; letter-spacing: .08em;
@@ -211,6 +260,16 @@
     <span class="aviso-tag">Espacio publicitario</span>
     <span class="aviso-cuerpo" id="aviso-cuerpo">Disponible para sponsors</span>
   </a>
+
+  <!-- QR para compartir el sitio con amigos -->
+  <div class="compartir">
+    <img class="qr" alt="Código QR de rioprofundo.com"
+         src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=0&color=06141f&bgcolor=eaf6f8&data=https://rioprofundo.com/">
+    <div class="compartir-txt">
+      <div class="compartir-t">Compartilo</div>
+      <div class="compartir-s">Escaneá y mandáselo a quien navegue o viva en la costa.</div>
+    </div>
+  </div>
 
   <footer>
     rioprofundo.com · datos: INA (a5) + StormGlass + Open-Meteo ·

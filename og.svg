@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="fondo" cx="50%" cy="-10%" r="120%">
+      <stop offset="0%" stop-color="#0a2540"/>
+      <stop offset="70%" stop-color="#06141f"/>
+    </radialGradient>
+    <linearGradient id="texto" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#eaf6f8"/>
+      <stop offset="100%" stop-color="#5fd4e6"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#fondo)"/>
+
+  <!-- onda de marea decorativa -->
+  <path d="M0,430 C150,370 250,490 400,440 C550,390 650,500 800,450 C950,400 1050,510 1200,460 L1200,630 L0,630 Z"
+        fill="#0e3354" opacity="0.55"/>
+  <path d="M0,430 C150,370 250,490 400,440 C550,390 650,500 800,450 C950,400 1050,510 1200,460"
+        fill="none" stroke="#5fd4e6" stroke-width="4" opacity="0.9" filter="url(#glow)"/>
+
+  <!-- marca -->
+  <text x="90" y="290" font-family="Georgia, 'Times New Roman', serif" font-weight="bold"
+        font-size="130" fill="url(#texto)" letter-spacing="-2">Río Profundo<tspan fill="#5fd4e6">.</tspan></text>
+
+  <!-- subtítulo -->
+  <text x="96" y="350" font-family="'Courier New', monospace" font-size="30" fill="#8fb2c4" letter-spacing="6">
+    MAREA Y NIVEL DEL RÍO DE LA PLATA · SAN FERNANDO</text>
+
+  <!-- dominio -->
+  <text x="96" y="560" font-family="'Courier New', monospace" font-size="34" fill="#5fd4e6" letter-spacing="2">rioprofundo.com</text>
+</svg>
