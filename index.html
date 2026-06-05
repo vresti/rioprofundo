@@ -219,6 +219,17 @@
   .aviso.activo .aviso-cuerpo { color: var(--espuma); }
   .aviso img { max-height: 64px; max-width: 100%; border-radius: 6px; }
 
+  /* Banner mtows: paleta de marca (verde WhatsApp + blanco) */
+  .aviso.mtows {
+    background:
+      radial-gradient(ellipse 90% 140% at 0% 0%, rgba(255,255,255,.12) 0%, transparent 55%),
+      linear-gradient(135deg, #25D366 0%, #1da851 100%);
+    border: 1px solid #1da851;
+  }
+  .aviso.mtows:hover { border-color: #ffffff; }
+  .aviso.mtows .aviso-cuerpo { color: #ffffff; }
+  .aviso.mtows .aviso-tag { color: rgba(255,255,255,.7); }
+
   /* ---- Compartir / QR ---- */
   .compartir {
     display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
@@ -302,10 +313,11 @@ document.getElementById('ref-min').textContent = REFRESH_MIN;
 //  - imagen: (opcional) URL de una imagen; si está, reemplaza al texto
 // ============================================================================
 const SPONSOR = {
-  activo: false,
-  texto:  'Tu marca acá',
-  url:    '#',
-  imagen: ''   // ej: 'https://.../banner.png'
+  activo: true,
+  texto:  'mtows · Tus emails importantes te llegan al WhatsApp',
+  url:    'https://mtows.com',
+  imagen: '',  // ej: 'https://.../banner.png'
+  tema:   'mtows'   // clase CSS de marca; '' para el estilo neutro por defecto
 };
 
 (function montarAviso() {
@@ -313,6 +325,7 @@ const SPONSOR = {
   const cuerpo = document.getElementById('aviso-cuerpo');
   if (!SPONSOR.activo) return;               // queda el cartel "disponible"
   a.classList.add('activo');
+  if (SPONSOR.tema) a.classList.add(SPONSOR.tema);   // paleta de marca del sponsor
   a.href = SPONSOR.url || '#';
   if (SPONSOR.imagen) {
     cuerpo.innerHTML = '<img src="' + SPONSOR.imagen + '" alt="' + (SPONSOR.texto||'') + '">';
