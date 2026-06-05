@@ -10,7 +10,9 @@
      CABLE PRINCIPAL — pegá acá tu URL /exec del Apps Script
      ==================================================================== -->
 <script>
-  const URL_GAS = 'https://script.google.com/macros/s/AKfycbxX-V91u8_huNtYnHfSK1XSwXkou75YAzWY5mO1EeGRYHe1I1rfUinYfdP8KkNyadeE/exec';
+  // Endpoint del tablero. Apunta al Worker de Cloudflare (cache de borde),
+  // que sirve el dato en milisegundos. El Worker llama al GAS por detrás.
+  const URL_GAS = 'https://restless-smoke-596c.vresti.workers.dev/';
   const REFRESH_MIN = 5;   // auto-refresco del tablero [minutos]
 </script>
 
