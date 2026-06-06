@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Útiles Náuticos · Río Profundo</title>
+<meta name="description" content="Teléfonos de urgencia, canales VHF y contactos útiles para la navegación en el Río de la Plata y el Delta. Río Profundo.">
+<link rel="canonical" href="https://rioprofundo.com/utiles.html">
+<meta name="theme-color" content="#06141f">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+<!-- Endpoint: Worker con ?d=utiles -->
+<script>
+  const URL_UTILES = 'https://restless-smoke-596c.vresti.workers.dev/?d=utiles';
+</script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --abismo:#06141f; --agua:#0a2540; --agua-2:#0e3354; --cian:#5fd4e6;
+    --espuma:#eaf6f8; --niebla:#8fb2c4; --ambar:#f2a93b; --rojo:#e8556b;
+    --verde:#4fd1a5; --linea:rgba(143,178,196,.18); --vidrio:rgba(14,51,84,.55);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:'Spline Sans Mono',monospace;
+    background:radial-gradient(ellipse 120% 80% at 50% -10%, var(--agua) 0%, var(--abismo) 70%), var(--abismo);
+    background-attachment:fixed; color:var(--espuma); min-height:100vh;
+    padding:clamp(14px,3vw,32px); -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:760px; margin:0 auto; }
+
+  /* Encabezado */
+  header { margin-bottom:clamp(18px,3vw,28px); }
+  .volver {
+    display:inline-flex; align-items:center; gap:6px; text-decoration:none;
+    color:var(--cian); font-size:.82rem; letter-spacing:.04em; margin-bottom:16px;
+  }
+  .volver:hover { opacity:.8; }
+  h1 {
+    font-family:'Fraunces',serif; font-weight:900;
+    font-size:clamp(1.8rem,6vw,2.8rem); line-height:1; letter-spacing:-.02em;
+    background:linear-gradient(180deg,var(--espuma),var(--cian));
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  .sub { color:var(--niebla); font-size:clamp(.72rem,2vw,.88rem); letter-spacing:.12em; text-transform:uppercase; margin-top:8px; }
+
+  /* Secciones */
+  .seccion {
+    background:var(--vidrio); border:1px solid var(--linea); border-radius:16px;
+    margin-bottom:14px; overflow:hidden;
+  }
+  .seccion-cab {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 20px; cursor:pointer; user-select:none;
+  }
+  .seccion-cab:hover { background:rgba(14,51,84,.4); }
+  .seccion-cab h2 {
+    font-family:'Fraunces',serif; font-weight:600; font-size:1.25rem; color:var(--espuma);
+  }
+  .seccion-cab .cnt { font-size:.72rem; color:var(--niebla); margin-left:10px; font-weight:400; }
+  .chevron { color:var(--cian); font-size:1.1rem; transition:transform .25s; }
+  .seccion.plegada .chevron { transform:rotate(-90deg); }
+  .seccion.plegada .seccion-body { display:none; }
+
+  .seccion-body { padding:0 14px 14px; }
+
+  /* Encabezados de columna (sub_titulo) */
+  .enc {
+    display:grid; grid-template-columns:1fr 1.4fr auto; gap:10px;
+    padding:6px 10px; font-size:.64rem; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--niebla); border-bottom:1px solid var(--linea); opacity:.7;
+  }
+
+  /* Items */
+  .item {
+    display:grid; grid-template-columns:1fr 1.4fr auto; gap:10px; align-items:center;
+    padding:11px 10px; border-bottom:1px solid rgba(143,178,196,.08);
+  }
+  .item:last-child { border-bottom:none; }
+  .item .nom { font-weight:600; font-size:.92rem; }
+  .item .det { font-size:.78rem; color:var(--niebla); line-height:1.4; }
+  .item .num { font-family:'Fraunces',serif; font-weight:600; font-size:1.05rem; text-align:right; white-space:nowrap; }
+  .item .num a { color:var(--cian); text-decoration:none; }
+  .item .num a:hover { text-decoration:underline; }
+  .item .num.tel a {
+    background:rgba(95,212,230,.12); padding:4px 10px; border-radius:8px;
+    display:inline-block;
+  }
+
+  @media (max-width:520px) {
+    .enc { display:none; }
+    .item { grid-template-columns:1fr auto; }
+    .item .det { grid-column:1 / -1; grid-row:2; }
+  }
+
+  .msg { text-align:center; color:var(--niebla); padding:50px 10px; font-size:.9rem; }
+  .msg.error { color:var(--rojo); }
+
+  .aviso-pie {
+    margin-top:22px; padding:16px 18px; border-radius:12px;
+    background:rgba(232,85,107,.08); border:1px solid rgba(232,85,107,.25);
+    font-size:.78rem; color:var(--niebla); line-height:1.6;
+  }
+  .aviso-pie b { color:var(--espuma); }
+
+  footer { text-align:center; color:var(--niebla); font-size:.7rem; margin-top:24px; letter-spacing:.06em; }
+  footer a { color:var(--cian); text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="volver" href="/">◄ Volver al tablero</a>
+    <h1>Útiles Náuticos</h1>
+    <div class="sub">Urgencias · VHF · Contactos del Delta</div>
+  </header>
+
+  <div id="contenido">
+    <div class="msg">Cargando datos útiles…</div>
+  </div>
+
+  <div class="aviso-pie">
+    <b>Información orientativa.</b> Los teléfonos y canales son de referencia y pueden cambiar.
+    En una emergencia, verificá siempre con la autoridad competente — Prefectura Naval Argentina,
+    <b>canal 16 VHF</b> o <b>106</b>.
+  </div>
+
+  <footer>
+    <a href="/">rioprofundo.com</a> · Útiles náuticos
+  </footer>
+
+</div>
+
+<script>
+async function cargar() {
+  try {
+    const r = await fetch(URL_UTILES, { redirect:'follow' });
+    const data = await r.json();
+    if (!data || data.error || !data.ok) throw new Error('respuesta inválida');
+    render(data);
+  } catch (e) {
+    document.getElementById('contenido').innerHTML =
+      '<div class="msg error">No se pudieron cargar los datos ahora.<br>Reintentá en un momento.</div>';
+  }
+}
+
+function esc(s) {
+  return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function render(d) {
+  const secciones = d.secciones || [];
+  if (!secciones.length) {
+    document.getElementById('contenido').innerHTML = '<div class="msg">Sin datos cargados.</div>';
+    return;
+  }
+
+  let html = '';
+  secciones.forEach((s, idx) => {
+    // VHF y secciones largas arrancan plegadas; urgencias abierta
+    const esLarga = s.items.length > 12;
+    const plegada = esLarga ? 'plegada' : '';
+    const enc = s.encabezados;
+
+    html += `<div class="seccion ${plegada}" data-sec="${idx}">
+      <div class="seccion-cab" onclick="toggle(${idx})">
+        <div><h2 style="display:inline">${esc(s.titulo)}</h2><span class="cnt">${s.items.length}</span></div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="seccion-body">`;
+
+    if (enc) {
+      html += `<div class="enc"><span>${esc(enc.nombre)}</span><span>${esc(enc.detalle)}</span><span>${esc(enc.numero)}</span></div>`;
+    }
+
+    s.items.forEach(it => {
+      let num = esc(it.numero);
+      if (it.click && it.numero) {
+        // teléfono: limpiar para tel: (solo dígitos y +)
+        const tel = String(it.numero).replace(/[^0-9+]/g, '');
+        num = `<span class="num tel"><a href="tel:${tel}">${esc(it.numero)}</a></span>`;
+      } else {
+        num = `<span class="num">${esc(it.numero)}</span>`;
+      }
+      html += `<div class="item">
+        <span class="nom">${esc(it.nombre)}</span>
+        <span class="det">${esc(it.detalle)}</span>
+        ${num}
+      </div>`;
+    });
+
+    html += `</div></div>`;
+  });
+
+  document.getElementById('contenido').innerHTML = html;
+}
+
+function toggle(idx) {
+  const el = document.querySelector('.seccion[data-sec="'+idx+'"]');
+  if (el) el.classList.toggle('plegada');
+}
+
+cargar();
+</script>
+</body>
+</html>

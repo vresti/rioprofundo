@@ -230,6 +230,20 @@
   .aviso.mtows .aviso-cuerpo { color: #ffffff; }
   .aviso.mtows .aviso-tag { color: rgba(255,255,255,.7); }
 
+  /* ---- Acceso a Útiles Náuticos ---- */
+  .utiles-link {
+    display:flex; align-items:center; gap:14px; text-decoration:none;
+    margin-top:clamp(22px,4vw,36px); padding:16px 20px;
+    background:var(--vidrio); border:1px solid var(--linea); border-radius:14px;
+    transition:transform .2s, border-color .2s, background .2s;
+  }
+  .utiles-link:hover { transform:translateY(-2px); border-color:var(--cian); background:var(--agua-2); }
+  .utiles-ico { font-size:1.8rem; flex-shrink:0; }
+  .utiles-txt { flex:1; }
+  .utiles-t { display:block; font-family:'Fraunces',serif; font-weight:600; font-size:1.15rem; color:var(--espuma); }
+  .utiles-s { display:block; font-size:.76rem; color:var(--niebla); margin-top:2px; }
+  .utiles-arr { color:var(--cian); font-size:1rem; }
+
   /* ---- Compartir / QR ---- */
   .compartir {
     display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
@@ -274,6 +288,16 @@
   <a class="aviso" id="aviso" href="#" target="_blank" rel="noopener">
     <span class="aviso-tag">Espacio publicitario</span>
     <span class="aviso-cuerpo" id="aviso-cuerpo">Disponible para sponsors</span>
+  </a>
+
+  <!-- Acceso a Útiles Náuticos -->
+  <a class="utiles-link" href="/utiles.html">
+    <span class="utiles-ico">🧭</span>
+    <span class="utiles-txt">
+      <span class="utiles-t">Útiles Náuticos</span>
+      <span class="utiles-s">Urgencias · canales VHF · contactos del Delta</span>
+    </span>
+    <span class="utiles-arr">►</span>
   </a>
 
   <!-- QR para compartir el sitio con amigos -->
