@@ -21,14 +21,16 @@
 <meta property="og:title" content="Río Profundo · Marea del Río de la Plata">
 <meta property="og:description" content="Marea, nivel y viento del Río de la Plata en San Fernando, en tiempo real. Para navegantes y vecinos de la costa.">
 <meta property="og:url" content="https://rioprofundo.com/">
-<meta property="og:image" content="https://rioprofundo.com/og.svg">
+<meta property="og:image" content="https://rioprofundo.com/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:locale" content="es_AR">
 
 <!-- Twitter / X -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Río Profundo · Marea del Río de la Plata">
 <meta name="twitter:description" content="Marea, nivel y viento del Río de la Plata en San Fernando, en tiempo real.">
-<meta name="twitter:image" content="https://rioprofundo.com/og.svg">
+<meta name="twitter:image" content="https://rioprofundo.com/og.png">
 
 <!-- Datos estructurados (Google) -->
 <script type="application/ld+json">
@@ -136,6 +138,12 @@
     letter-spacing: -.03em;
   }
   .ahora .nivel .unidad { font-size: clamp(1rem,3vw,1.4rem); color: var(--niebla); }
+  .ahora .nivel .tendencia {
+    align-self: center; margin-left: 8px; flex-shrink: 0;
+    transform-origin: 50% 50%;
+    transition: transform .6s cubic-bezier(.2,.8,.2,1);
+    filter: drop-shadow(0 0 6px rgba(95,212,230,.35));
+  }
   .ahora .meta { text-align: right; font-size: .8rem; color: var(--niebla); line-height: 1.7; }
   .ahora .meta .hora { color: var(--espuma); font-size: 1rem; font-weight: 600; }
 
@@ -424,6 +432,15 @@ function render(d) {
     }
   }
 
+  // ---- FLECHA DE TENDENCIA: derivada de la curva "calculado ahora" ----
+  // Comparamos el nivel proyectado AHORA contra el de hace 30 min, sobre la
+  // misma curva (astronómica + anomalía vigente). La pendiente (cm/30min) define
+  // el ÁNGULO de la flecha: cuanto más rápido se mueve el agua, más empinada.
+  //  - sube  -> apunta arriba (hacia las 12)
+  //  - estable (zona muerta) -> horizontal (hacia las 3)
+  //  - baja  -> apunta abajo (hacia las 6)
+  const flecha = calcularTendencia(d, dif, datoFresco);
+
   const v = d.viento || {};
   const cuadColor = v.cuadrante === 'SE' ? 'var(--rojo)'
                   : v.cuadrante === 'NO' ? 'var(--verde)' : 'var(--niebla)';
@@ -436,6 +453,7 @@ function render(d) {
         <div class="nivel">
           <span class="valor">${nivelActual != null ? nivelActual.toFixed(2) : '—'}</span>
           <span class="unidad">m</span>
+          ${flecha.svg}
         </div>
         ${estimTxt}
       </div>
@@ -494,6 +512,62 @@ function render(d) {
   `;
 
   dibujar(d, horaActual, nivelActual, estimAhora);
+}
+
+// ============================================================================
+//  TENDENCIA — flecha que indica hacia dónde y cuán rápido va el agua.
+//  Es la derivada de la curva "calculado ahora": compara el nivel proyectado
+//  en AHORA contra el de hace VENTANA_MIN. La pendiente (cm en ese lapso) se
+//  mapea a un ángulo (±ANG_MAX desde la horizontal). Debajo de ZONA_MUERTA se
+//  considera estacionario (horizontal). Devuelve { svg } listo para insertar.
+// ============================================================================
+function calcularTendencia(d, dif, datoFresco) {
+  const VENTANA_MIN = 30;       // lapso de comparación [min]
+  const ZONA_MUERTA = 0.02;     // < 2 cm en la ventana -> estacionario
+  const TOPE_CM = 0.15;         // 15 cm/ventana o más -> flecha al ángulo máximo
+  const ANG_MAX = 60;           // inclinación máxima desde la horizontal [grados]
+
+  // Si no hay proyección confiable, no mostramos flecha (evita inventar tendencia).
+  if (!datoFresco || dif == null) return { svg: '', dir: 'na', pend: 0 };
+
+  const ahoraMs = d.ts;
+  const antesMs = ahoraMs - VENTANA_MIN * 60 * 1000;
+  const aAhora = astronEn(d, ahoraMs);
+  const aAntes = astronEn(d, antesMs);
+  if (aAhora == null || aAntes == null) return { svg: '', dir: 'na', pend: 0 };
+
+  // Proyección = astronómica + anomalía vigente (la misma 'dif' del calculado ahora)
+  const projAhora = aAhora + dif;
+  const projAntes = aAntes + dif;
+  const delta = projAhora - projAntes;   // metros en la ventana (+sube / -baja)
+
+  // Dirección con zona muerta
+  let dir = 'estable';
+  if (delta >= ZONA_MUERTA) dir = 'sube';
+  else if (delta <= -ZONA_MUERTA) dir = 'baja';
+
+  // Ángulo proporcional a la pendiente (0° = horizontal; + = hacia arriba).
+  // En SVG, "y" crece hacia abajo, así que un ángulo positivo (subir) lo
+  // dibujamos rotando en sentido antihorario (negativo en CSS rotate).
+  let mag = Math.min(Math.abs(delta) / TOPE_CM, 1);   // 0..1
+  let angulo = 0;
+  if (dir === 'sube') angulo = -ANG_MAX * mag;        // hacia arriba
+  else if (dir === 'baja') angulo = ANG_MAX * mag;    // hacia abajo
+  // estable -> 0° (horizontal)
+
+  // Color: neutro siempre en esta fase 1 (fase 2 podría pintar según sudestada)
+  const color = 'var(--cian)';
+
+  // Flecha SVG: una flecha horizontal que rotamos. Apunta a la derecha por
+  // defecto (estable=3hs); rotada hacia arriba=12hs o abajo=6hs.
+  const svg = `<svg class="tendencia" viewBox="0 0 24 24" width="22" height="22"
+      style="transform:rotate(${angulo.toFixed(1)}deg)"
+      role="img" aria-label="Tendencia: ${dir === 'sube' ? 'el agua sube' : dir === 'baja' ? 'el agua baja' : 'estacionaria'}">
+      <line x1="3" y1="12" x2="19" y2="12" stroke="${color}" stroke-width="2.4" stroke-linecap="round"/>
+      <polyline points="13,6 20,12 13,18" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+
+  return { svg: svg, dir: dir, pend: delta };
 }
 
 // ---- interpolación de la curva astronómica en un instante (para anomalía) ----
