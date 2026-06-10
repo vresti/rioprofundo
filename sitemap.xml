@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- Tablero principal: altura y nivel de marea en San Fernando -->
+  <url>
+    <loc>https://rioprofundo.com/</loc>
+    <lastmod>2026-06-10</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- Útiles náuticos: canales VHF y teléfonos de urgencia del Delta -->
+  <url>
+    <loc>https://rioprofundo.com/utiles.html</loc>
+    <lastmod>2026-06-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Combustibles: precios en estaciones de carga náutica
+       de San Fernando, San Isidro y Tigre -->
+  <url>
+    <loc>https://rioprofundo.com/combustibles.html</loc>
+    <lastmod>2026-06-10</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+</urlset>

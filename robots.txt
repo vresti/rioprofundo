@@ -1,0 +1,7 @@
+# rioprofundo.com — reglas para buscadores
+# Sitio público de marea, útiles náuticos y combustibles del Delta.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://rioprofundo.com/sitemap.xml
