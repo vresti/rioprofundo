@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Combustibles Náuticos · Río Profundo</title>
+<meta name="description" content="Precios de combustible en las estaciones de carga náutica del Delta de Tigre y San Fernando. Datos oficiales de la Secretaría de Energía. Río Profundo.">
+<link rel="canonical" href="https://rioprofundo.com/combustibles.html">
+<meta name="theme-color" content="#06141f">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+<!-- Endpoint: Worker con ?d=combustibles -->
+<script>
+  const URL_COMBUSTIBLES = 'https://restless-smoke-596c.vresti.workers.dev/?d=combustibles';
+
+  // --- Umbrales de frescura (configurables en un solo lugar) ---
+  // Días hasta los que el dato se considera confiable / algo viejo / solo referencia.
+  const DIAS_VERDE = 30;   // <= 30 días  -> verde  (dato reciente)
+  const DIAS_AMBAR = 90;   // <= 90 días  -> ámbar  (algo viejo, orientativo)
+                           //  > 90 días  -> gris   (solo referencia, conviene consultar)
+
+  // Orden y etiquetas de las pestañas. idproducto según Secretaría de Energía.
+  const PESTANAS = [
+    { id: 2,  etiqueta: 'Súper' },
+    { id: 3,  etiqueta: 'Premium' },
+    { id: 19, etiqueta: 'Gasoil' },
+    { id: 21, etiqueta: 'Gasoil G3' }
+  ];
+  const PROD_INICIAL = 2;  // arranca en Nafta Súper
+</script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --abismo:#06141f; --agua:#0a2540; --agua-2:#0e3354; --cian:#5fd4e6;
+    --espuma:#eaf6f8; --niebla:#8fb2c4; --ambar:#f2a93b; --rojo:#e8556b;
+    --verde:#4fd1a5; --linea:rgba(143,178,196,.18); --vidrio:rgba(14,51,84,.55);
+    --gris:#7d96a8;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:'Spline Sans Mono',monospace;
+    background:radial-gradient(ellipse 120% 80% at 50% -10%, var(--agua) 0%, var(--abismo) 70%), var(--abismo);
+    background-attachment:fixed; color:var(--espuma); min-height:100vh;
+    padding:clamp(14px,3vw,32px); -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:760px; margin:0 auto; }
+
+  /* Encabezado */
+  header { margin-bottom:clamp(16px,3vw,24px); }
+  .volver {
+    display:inline-flex; align-items:center; gap:6px; text-decoration:none;
+    color:var(--cian); font-size:.82rem; letter-spacing:.04em; margin-bottom:16px;
+  }
+  .volver:hover { opacity:.8; }
+  h1 {
+    font-family:'Fraunces',serif; font-weight:900;
+    font-size:clamp(1.8rem,6vw,2.8rem); line-height:1; letter-spacing:-.02em;
+    background:linear-gradient(180deg,var(--espuma),var(--cian));
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  .sub { color:var(--niebla); font-size:clamp(.72rem,2vw,.88rem); letter-spacing:.12em; text-transform:uppercase; margin-top:8px; }
+
+  /* Pestañas de combustible */
+  .tabs { display:flex; gap:6px; margin:clamp(16px,3vw,22px) 0 14px; }
+  .tab {
+    flex:1; text-align:center; padding:9px 4px; border-radius:11px; cursor:pointer;
+    user-select:none; font-size:.8rem; font-weight:500; letter-spacing:.02em;
+    background:rgba(255,255,255,.05); color:var(--niebla);
+    border:1px solid transparent; transition:background .15s,color .15s;
+    white-space:nowrap;
+  }
+  .tab:hover { background:rgba(255,255,255,.08); }
+  .tab.activa { background:var(--cian); color:var(--abismo); }
+
+  /* Lista de estaciones con precio */
+  .lista { display:flex; flex-direction:column; gap:9px; }
+  .fila {
+    display:flex; align-items:center; gap:12px; padding:13px 15px;
+    border-radius:13px; cursor:pointer; background:rgba(255,255,255,.035);
+    border:1px solid transparent; transition:background .15s;
+  }
+  .fila:hover { background:rgba(255,255,255,.06); }
+  .fila.verde { background:rgba(79,209,165,.10); border-color:rgba(79,209,165,.30); }
+  .fila .info { flex:1; min-width:0; }
+  .fila .nom {
+    font-weight:600; font-size:.95rem; color:var(--espuma);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .fila .meta { font-size:.72rem; color:var(--niebla); margin-top:3px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .fila .precio-box { text-align:right; white-space:nowrap; }
+  .fila .precio { font-family:'Fraunces',serif; font-weight:600; font-size:1.15rem; }
+  .fila .edad { font-size:.66rem; margin-top:2px; }
+
+  .verde  .precio, .verde  .edad { color:var(--verde); }
+  .ambar  .precio { color:var(--espuma); }
+  .ambar  .edad   { color:var(--ambar); }
+  .gris   .precio { color:var(--gris); }
+  .gris   .edad   { color:var(--gris); }
+
+  .tag-reciente {
+    font-size:.6rem; color:var(--verde); border:1px solid rgba(79,209,165,.4);
+    border-radius:6px; padding:1px 6px; letter-spacing:.04em;
+  }
+
+  /* Grupo "consultar" (sin dato fresco o sin precio para ese combustible) */
+  .grupo-consultar { margin-top:18px; }
+  .grupo-cab {
+    font-size:.68rem; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--niebla); padding:0 4px 8px; opacity:.8;
+  }
+  .fila-min {
+    display:flex; align-items:center; gap:10px; padding:11px 15px;
+    border-radius:11px; cursor:pointer; background:rgba(255,255,255,.02);
+  }
+  .fila-min:hover { background:rgba(255,255,255,.05); }
+  .fila-min .nom { flex:1; font-size:.86rem; color:var(--niebla); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fila-min .accion { font-size:.7rem; color:var(--cian); white-space:nowrap; }
+
+  .icono { color:var(--cian); opacity:.8; }
+
+  .msg { text-align:center; color:var(--niebla); padding:50px 10px; font-size:.9rem; }
+  .msg.error { color:var(--rojo); }
+
+  /* Nota al pie */
+  .aviso-pie {
+    margin-top:22px; padding:15px 18px; border-radius:12px;
+    background:rgba(95,212,230,.06); border:1px solid rgba(95,212,230,.18);
+    font-size:.74rem; color:var(--niebla); line-height:1.6;
+  }
+  .aviso-pie b { color:var(--espuma); }
+
+  footer { text-align:center; color:var(--niebla); font-size:.7rem; margin-top:24px; letter-spacing:.06em; }
+  footer a { color:var(--cian); text-decoration:none; }
+
+  /* ---- Modal de detalle de estación ---- */
+  .modal-fondo {
+    position:fixed; inset:0; background:rgba(3,12,20,.72); backdrop-filter:blur(3px);
+    display:none; align-items:flex-end; justify-content:center; z-index:50; padding:0;
+  }
+  .modal-fondo.abierto { display:flex; }
+  .modal {
+    width:100%; max-width:480px; background:var(--agua);
+    border:1px solid rgba(95,212,230,.25); border-bottom:none;
+    border-radius:20px 20px 0 0; padding:20px 20px 26px;
+    animation:subir .22s ease-out;
+  }
+  @media (min-width:520px) {
+    .modal-fondo { align-items:center; }
+    .modal { border-radius:20px; border-bottom:1px solid rgba(95,212,230,.25); }
+  }
+  @keyframes subir { from { transform:translateY(30px); opacity:.4; } to { transform:translateY(0); opacity:1; } }
+
+  .modal-cab { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
+  .modal-cab .tit { font-family:'Fraunces',serif; font-weight:600; font-size:1.3rem; color:var(--espuma); line-height:1.1; }
+  .modal-cab .ban { font-size:.74rem; color:var(--cian); margin-top:4px; letter-spacing:.04em; }
+  .modal-cerrar { background:none; border:none; color:var(--niebla); font-size:1.5rem; cursor:pointer; line-height:1; padding:0 4px; }
+  .modal-cerrar:hover { color:var(--espuma); }
+
+  .prod-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:16px; }
+  .prod-cel { background:rgba(255,255,255,.04); border-radius:10px; padding:10px 12px; }
+  .prod-cel .pl { font-size:.68rem; color:var(--niebla); }
+  .prod-cel .pp { font-family:'Fraunces',serif; font-weight:600; font-size:1.05rem; margin-top:2px; }
+  .prod-cel .pe { font-size:.62rem; margin-top:2px; }
+  .prod-cel.verde .pp, .prod-cel.verde .pe { color:var(--verde); }
+  .prod-cel.ambar .pp { color:var(--espuma); } .prod-cel.ambar .pe { color:var(--ambar); }
+  .prod-cel.gris  .pp, .prod-cel.gris  .pe { color:var(--gris); }
+  .prod-cel.vacia .pp { color:var(--gris); font-size:.8rem; font-family:'Spline Sans Mono',monospace; }
+
+  .modal-datos { font-size:.8rem; color:var(--niebla); line-height:1.9; border-top:1px solid var(--linea); padding-top:12px; }
+  .modal-datos .ico { color:var(--cian); margin-right:8px; }
+
+  .modal-acciones { display:flex; gap:9px; margin-top:16px; }
+  .btn-accion {
+    flex:1; text-align:center; padding:12px 0; border-radius:11px; text-decoration:none;
+    font-size:.85rem; font-weight:500;
+  }
+  .btn-llamar { background:var(--cian); color:var(--abismo); }
+  .btn-mapa { background:rgba(95,212,230,.12); color:var(--cian); }
+  .btn-accion.off { opacity:.4; pointer-events:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="volver" href="/">◄ Volver al tablero</a>
+    <h1>Combustibles</h1>
+    <div class="sub">Carga náutica · Delta y San Fernando</div>
+  </header>
+
+  <div id="tabs" class="tabs"></div>
+  <div id="contenido">
+    <div class="msg">Cargando precios…</div>
+  </div>
+
+  <div class="aviso-pie">
+    <b>Precios declarados por las estaciones</b> a la Secretaría de Energía (Res. 314/2016).
+    Cada precio muestra <b>cuándo fue informado</b>: cuanto más reciente, más confiable.
+    Los datos viejos quedan abajo, como referencia. Ante la duda, <b>consultá en la estación</b>.
+  </div>
+
+  <footer>
+    <a href="/">rioprofundo.com</a> · Combustibles náuticos
+  </footer>
+
+</div>
+
+<!-- Modal de detalle -->
+<div id="modal" class="modal-fondo" onclick="cerrarModalFondo(event)">
+  <div class="modal" id="modal-cuerpo"></div>
+</div>
+
+<script>
+let DATA = null;
+let prodActivo = PROD_INICIAL;
+
+async function cargar() {
+  try {
+    const r = await fetch(URL_COMBUSTIBLES, { redirect:'follow' });
+    const data = await r.json();
+    if (!data || data.error || !data.ok) throw new Error('respuesta inválida');
+    DATA = data;
+    pintarTabs();
+    render();
+  } catch (e) {
+    document.getElementById('contenido').innerHTML =
+      '<div class="msg error">No se pudieron cargar los precios ahora.<br>Reintentá en un momento.</div>';
+  }
+}
+
+function esc(s) {
+  return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function plata(n) {
+  return '$' + Number(n).toLocaleString('es-AR');
+}
+
+function nivel(dias) {
+  if (dias == null) return 'gris';
+  if (dias <= DIAS_VERDE) return 'verde';
+  if (dias <= DIAS_AMBAR) return 'ambar';
+  return 'gris';
+}
+
+function edadTexto(dias) {
+  if (dias == null) return 'sin fecha';
+  if (dias <= 0) return 'informado hoy';
+  if (dias === 1) return 'inf. ayer';
+  if (dias < 60) return 'inf. hace ' + dias + ' días';
+  const m = Math.round(dias / 30);
+  return 'inf. hace ~' + m + ' meses';
+}
+
+/** Devuelve el producto activo de una estación, o null si no lo tiene. */
+function prodDe(est, idprod) {
+  if (est.sin_dato || !est.productos) return null;
+  for (const p of est.productos) if (p.idproducto === idprod) return p;
+  return null;
+}
+
+function pintarTabs() {
+  const cont = document.getElementById('tabs');
+  cont.innerHTML = PESTANAS.map(p =>
+    `<div class="tab ${p.id===prodActivo?'activa':''}" onclick="cambiarTab(${p.id})">${esc(p.etiqueta)}</div>`
+  ).join('');
+}
+
+function cambiarTab(id) {
+  prodActivo = id;
+  pintarTabs();
+  render();
+}
+
+function render() {
+  if (!DATA) return;
+  const ests = DATA.estaciones || [];
+
+  // separar: con precio para este combustible  vs  a consultar
+  const conPrecio = [];
+  const aConsultar = [];
+  ests.forEach((est, idx) => {
+    const p = prodDe(est, prodActivo);
+    if (p && p.precio != null) conPrecio.push({ est, idx, p });
+    else aConsultar.push({ est, idx });
+  });
+
+  // ordenar por FRESCURA (menos días arriba = dato más reciente)
+  conPrecio.sort((a, b) => {
+    const da = a.p.dias == null ? 1e9 : a.p.dias;
+    const db = b.p.dias == null ? 1e9 : b.p.dias;
+    return da - db;
+  });
+
+  let html = '';
+
+  if (conPrecio.length) {
+    html += '<div class="lista">';
+    conPrecio.forEach((o, i) => {
+      const niv = nivel(o.p.dias);
+      const reciente = (i === 0 && niv === 'verde')
+        ? '<span class="tag-reciente">dato reciente</span>' : '';
+      html += `<div class="fila ${niv}" onclick="abrirModal(${o.idx})">
+        <div class="info">
+          <div class="nom">${esc(o.est.empresa || o.est.bandera)}</div>
+          <div class="meta">
+            <span class="icono">⚓</span>${esc(o.est.partido || '')}
+            ${reciente}
+          </div>
+        </div>
+        <div class="precio-box">
+          <div class="precio">${plata(o.p.precio)}</div>
+          <div class="edad">${edadTexto(o.p.dias)}</div>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  } else {
+    html += '<div class="msg">Sin precio reciente para este combustible.<br>Mirá las estaciones para consultar.</div>';
+  }
+
+  if (aConsultar.length) {
+    html += `<div class="grupo-consultar">
+      <div class="grupo-cab">${conPrecio.length ? 'Otras estaciones · consultar precio' : 'Estaciones de carga · consultar precio'}</div>`;
+    aConsultar.forEach(o => {
+      html += `<div class="fila-min" onclick="abrirModal(${o.idx})">
+        <span class="icono">⚓</span>
+        <span class="nom">${esc(o.est.empresa || o.est.bandera)}</span>
+        <span class="accion">ver ►</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  document.getElementById('contenido').innerHTML = html;
+}
+
+function abrirModal(idx) {
+  const est = (DATA.estaciones || [])[idx];
+  if (!est) return;
+
+  // grilla de los 4 productos (orden fijo de PESTANAS), cada uno con su color de frescura
+  let grid = '';
+  PESTANAS.forEach(pe => {
+    const p = prodDe(est, pe.id);
+    if (p && p.precio != null) {
+      const niv = nivel(p.dias);
+      grid += `<div class="prod-cel ${niv}">
+        <div class="pl">${esc(pe.etiqueta)}</div>
+        <div class="pp">${plata(p.precio)}</div>
+        <div class="pe">${edadTexto(p.dias)}</div>
+      </div>`;
+    } else {
+      grid += `<div class="prod-cel vacia">
+        <div class="pl">${esc(pe.etiqueta)}</div>
+        <div class="pp">s/info</div>
+      </div>`;
+    }
+  });
+
+  const tel = String(est.telefono || '').replace(/[^0-9+]/g, '');
+  const hayTel = tel.length >= 6;
+  const hayMapa = est.link && /^https?:\/\//.test(est.link);
+
+  const cuerpo = `
+    <div class="modal-cab">
+      <div>
+        <div class="tit">${esc(est.empresa || est.bandera)}</div>
+        <div class="ban">${esc(est.bandera)} · ${esc(est.acceso || '')}</div>
+      </div>
+      <button class="modal-cerrar" onclick="cerrarModal()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="prod-grid">${grid}</div>
+    <div class="modal-datos">
+      <div><span class="ico">📍</span>${esc(est.direccion || '')}</div>
+      ${est.partido ? `<div><span class="ico">🧭</span>${esc(est.partido)}</div>` : ''}
+    </div>
+    <div class="modal-acciones">
+      <a class="btn-accion btn-llamar ${hayTel?'':'off'}" href="${hayTel?('tel:'+tel):'#'}">Llamar</a>
+      <a class="btn-accion btn-mapa ${hayMapa?'':'off'}" href="${hayMapa?esc(est.link):'#'}" target="_blank" rel="noopener">Ir en Maps</a>
+    </div>`;
+
+  document.getElementById('modal-cuerpo').innerHTML = cuerpo;
+  document.getElementById('modal').classList.add('abierto');
+}
+
+function cerrarModal() {
+  document.getElementById('modal').classList.remove('abierto');
+}
+function cerrarModalFondo(e) {
+  if (e.target === document.getElementById('modal')) cerrarModal();
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModal(); });
+
+cargar();
+</script>
+</body>
+</html>
