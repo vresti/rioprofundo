@@ -152,10 +152,10 @@
     font-weight: 500; letter-spacing: .01em;
   }
   .estimado {
-    margin-top: 6px; font-size: .8rem; color: var(--cian);
+    margin-top: 6px; font-size: .92rem; color: var(--cian);
     letter-spacing: .04em; opacity: .9;
   }
-  .estimado b { font-weight: 600; }
+  .estimado b { font-weight: 600; color: var(--espuma); }
 
   /* ---- Lienzo de la curva ---- */
   .grafico-cont { position: relative; width: 100%; }
@@ -471,7 +471,7 @@ function render(d) {
     <div class="leyenda">
       <span><i class="swatch" style="background:var(--cian)"></i> Marea astronómica</span>
       <span><i class="swatch dot" style="background:var(--espuma)"></i> Nivel real (INA)</span>
-      <span><i class="swatch" style="background:var(--ambar);border-bottom:2px dotted var(--ambar);background:none;height:0"></i> Proyección a ahora</span>
+      <span><i class="swatch" style="background:var(--ambar);border-bottom:2px dotted var(--ambar);background:none;height:0"></i> Proyección actual</span>
     </div>
 
     <div class="instrumentos">
