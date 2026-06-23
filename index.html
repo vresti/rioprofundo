@@ -156,6 +156,11 @@
     letter-spacing: .04em; opacity: .9;
   }
   .estimado b { font-weight: 600; color: var(--espuma); }
+  .medido {
+    margin-top: 6px; font-size: .82rem; color: var(--niebla);
+    letter-spacing: .03em;
+  }
+  .medido b { color: var(--espuma); font-weight: 600; }
 
   /* ---- Lienzo de la curva ---- */
   .grafico-cont { position: relative; width: 100%; }
@@ -391,6 +396,23 @@ function rumbo(theta) {
   const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
   return dirs[Math.round((theta % 360) / 22.5) % 16];
 }
+// Flecha de tendencia a partir de la 'direccion' que entrega el motor de
+// Hidroprobe ('sube' | 'baja' | 'quieto'). Misma fuente que el valor presente,
+// así no se contradicen. Ángulo fijo (el motor da categoría, no magnitud).
+function flechaDesdeDireccion(dir) {
+  const ANG = 30;
+  let angulo = 0;
+  if (dir === 'sube') angulo = -ANG;        // arriba
+  else if (dir === 'baja') angulo = ANG;    // abajo
+  // 'quieto' -> 0 (horizontal)
+  const color = 'var(--cian)';
+  const label = dir === 'sube' ? 'el agua sube' : dir === 'baja' ? 'el agua baja' : 'estacionaria';
+  return `<svg class="tendencia" viewBox="0 0 24 24" width="22" height="22"
+      style="transform:rotate(${angulo}deg)" role="img" aria-label="Tendencia: ${label}">
+      <line x1="3" y1="12" x2="19" y2="12" stroke="${color}" stroke-width="2.4" stroke-linecap="round"/>
+      <polyline points="13,6 20,12 13,18" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+}
 
 async function cargar() {
   try {
@@ -422,21 +444,33 @@ function render(d) {
   // 'presente' (Hidroprobe no respondió), caemos a la sinusoide de siempre
   // (astronómica de ahora + anomalía vigente), solo si el dato es fresco (<3 h).
   const VIGENCIA_MS = 3 * 3600 * 1000;
-  let estimTxt = '';
   let estimAhora = null;
   const datoFresco = ultimo && (d.ts - horaActual) <= VIGENCIA_MS;
 
   if (d.presente && d.presente.valor != null) {
-    // PLAN A: dato del motor de Hidroprobe
+    // PLAN A: dato del motor de Hidroprobe (la fuente de la verdad del presente)
     estimAhora = d.presente.valor;
-    estimTxt = `<div class="estimado">calculado ahora · <b>~${estimAhora.toFixed(2)} m</b></div>`;
   } else if (datoFresco && dif != null) {
-    // PLAN B: proyección sinusoidal (fallback)
+    // PLAN B: proyección sinusoidal (red de seguridad si el motor no respondió)
     const astAhora = astronEn(d, d.ts);
-    if (astAhora != null) {
-      estimAhora = astAhora + dif;
-      estimTxt = `<div class="estimado">calculado ahora · <b>~${estimAhora.toFixed(2)} m</b></div>`;
-    }
+    if (astAhora != null) estimAhora = astAhora + dif;
+  }
+
+  // ---- JERARQUÍA: el protagonista es el PRESENTE (motor); el último medido
+  // pasa a anclaje secundario. Si no hay presente (motor caído y sin dato
+  // fresco), el número grande cae al último medido como respaldo. ----
+  const hayPresente = (estimAhora != null);
+  const valorGrande = hayPresente ? estimAhora : nivelActual;
+
+  let etiquetaGrande, medidoTxt;
+  if (hayPresente) {
+    etiquetaGrande = `<div class="estimado">calculado ahora</div>`;
+    medidoTxt = (nivelActual != null)
+      ? `<div class="medido">último medido · <b>${nivelActual.toFixed(2)} m</b></div>`
+      : '';
+  } else {
+    etiquetaGrande = `<div class="estimado" style="opacity:.6">último dato medido</div>`;
+    medidoTxt = '';
   }
 
   // ---- FLECHA DE TENDENCIA: derivada de la curva "calculado ahora" ----
@@ -446,7 +480,11 @@ function render(d) {
   //  - sube  -> apunta arriba (hacia las 12)
   //  - estable (zona muerta) -> horizontal (hacia las 3)
   //  - baja  -> apunta abajo (hacia las 6)
-  const flecha = calcularTendencia(d, dif, datoFresco);
+  // Flecha de tendencia: si el motor entrega 'direccion', esa manda (misma
+  // fuente que el valor grande). Si no, derivamos de la curva (Plan B).
+  const flechaSvg = (d.presente && d.presente.direccion)
+    ? flechaDesdeDireccion(d.presente.direccion)
+    : calcularTendencia(d, dif, datoFresco).svg;
 
   const v = d.viento || {};
   const cuadColor = v.cuadrante === 'SE' ? 'var(--rojo)'
@@ -458,11 +496,12 @@ function render(d) {
     <div class="ahora">
       <div>
         <div class="nivel">
-          <span class="valor">${nivelActual != null ? nivelActual.toFixed(2) : '—'}</span>
+          <span class="valor">${valorGrande != null ? valorGrande.toFixed(2) : '—'}</span>
           <span class="unidad">m</span>
-          ${flecha.svg}
+          ${flechaSvg}
         </div>
-        ${estimTxt}
+        ${etiquetaGrande}
+        ${medidoTxt}
       </div>
       <div class="meta">
         <div class="hora">Medido a las ${fmtHora(horaActual)} hs</div>
