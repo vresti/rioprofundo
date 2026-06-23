@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Anti-caché del HTML: que el navegador no quede pegado a un index viejo
+     cuando se sube una versión nueva a GitHub Pages. Revalida siempre este
+     documento. NO afecta el JSON del Worker ni su caché de borde: solo el HTML. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+
 <title>Río Profundo · Marea del Río de la Plata en San Fernando</title>
 <meta name="description" content="Marea, nivel y viento del Río de la Plata en San Fernando, en tiempo real. Para navegantes y vecinos de la costa: alturas, sudestada, bajante y pronóstico de marea astronómica.">
 <meta name="keywords" content="marea río de la plata, nivel del río san fernando, sudestada, bajante, marea hoy, marea astronómica, altura del río, viento san fernando, delta, navegación, calado, río de la plata tiempo real">
@@ -416,7 +424,10 @@ function flechaDesdeDireccion(dir) {
 
 async function cargar() {
   try {
-    const r = await fetch(URL_GAS, { redirect: 'follow' });
+    // cache:'no-store' -> el navegador siempre le pregunta al Worker (no usa su
+    // caché local). El Worker igual responde desde su caché de borde de 5 min,
+    // así la cuota de GAS sigue protegida; solo evitamos JSON viejo del navegador.
+    const r = await fetch(URL_GAS, { redirect: 'follow', cache: 'no-store' });
     const data = await r.json();
     if (!data || data.error || !data.ok) throw new Error('respuesta inválida');
     render(data);
