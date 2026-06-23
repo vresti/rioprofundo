@@ -417,17 +417,24 @@ function render(d) {
   const astEnDato = astronEn(d, horaActual);
   const dif = (ultimo && astEnDato != null) ? (ultimo.h - astEnDato) : null;
 
-  // ESTIMADO AHORA: marea astronómica de ahora + última anomalía observada.
-  // Solo si el dato medido es reciente (< 3 h); si no, el viento pudo cambiar
-  // y la proyección dejaría de ser confiable -> no estimamos.
+  // ESTIMADO AHORA: PLAN A -> el presente que cocina Hidroprobe (motor combinado
+  // de centinelas, ~6 cm). PLAN B (red de seguridad) -> si el JSON no trae
+  // 'presente' (Hidroprobe no respondió), caemos a la sinusoide de siempre
+  // (astronómica de ahora + anomalía vigente), solo si el dato es fresco (<3 h).
   const VIGENCIA_MS = 3 * 3600 * 1000;
   let estimTxt = '';
   let estimAhora = null;
   const datoFresco = ultimo && (d.ts - horaActual) <= VIGENCIA_MS;
-  if (datoFresco && dif != null) {
+
+  if (d.presente && d.presente.valor != null) {
+    // PLAN A: dato del motor de Hidroprobe
+    estimAhora = d.presente.valor;
+    estimTxt = `<div class="estimado">calculado ahora · <b>~${estimAhora.toFixed(2)} m</b></div>`;
+  } else if (datoFresco && dif != null) {
+    // PLAN B: proyección sinusoidal (fallback)
     const astAhora = astronEn(d, d.ts);
     if (astAhora != null) {
-      estimAhora = astAhora + dif;   // marea de ahora + anomalía vigente
+      estimAhora = astAhora + dif;
       estimTxt = `<div class="estimado">calculado ahora · <b>~${estimAhora.toFixed(2)} m</b></div>`;
     }
   }
