@@ -743,6 +743,44 @@ function dibujar(d, horaActual, nivelActual, estimAhora) {
     ctx.fillStyle = '#f2a93b'; ctx.fill();
   }
 
+  // ---- PROYECCIÓN A FUTURO (motor de Hidroprobe): del ahora hacia +2h30,
+  // anclada al presente y siguiendo a La Plata. Mismo naranja punteado que la
+  // proyección al ahora, pero se DESVANECE con la firmeza: nítido cerca del
+  // ahora, difuso hacia el final (más incertidumbre cuanto más lejos). ----
+  const proy = d.presente && d.presente.proyeccion;
+  if (proy && proy.ok && proy.puntos && proy.puntos.length > 1) {
+    const pts = proy.puntos;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    // segmento a segmento, variando la opacidad con la firmeza del punto
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const alpha = (b.firmeza != null ? b.firmeza : 1);
+      ctx.strokeStyle = 'rgba(242,169,59,' + alpha + ')';
+      ctx.beginPath();
+      ctx.moveTo(X(a.t), Y(a.valor));
+      ctx.lineTo(X(b.t), Y(b.valor));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // punto + etiqueta al final del horizonte
+    const fin = pts[pts.length - 1];
+    const xf = X(fin.t), yf = Y(fin.valor);
+    ctx.globalAlpha = Math.max(fin.firmeza || 0.5, 0.45);
+    ctx.beginPath(); ctx.arc(xf, yf, 3.5, 0, 7);
+    ctx.fillStyle = '#f2a93b'; ctx.fill();
+    ctx.globalAlpha = 1;
+    const hh = Math.floor(fin.min / 60), mm = fin.min % 60;
+    const cuando = hh ? ('+' + hh + 'h' + (mm ? (mm < 10 ? '0' : '') + mm : ''))
+                      : ('+' + mm + ' min');
+    ctx.fillStyle = 'rgba(242,169,59,.9)';
+    ctx.font = '600 10px "Spline Sans Mono", monospace';
+    const derecha = xf > W - 95;
+    ctx.textAlign = derecha ? 'right' : 'left';
+    ctx.fillText(cuando + ' · ~' + fin.valor.toFixed(2) + ' m',
+                 derecha ? xf - 6 : xf + 6, yf - 8);
+  }
+
   // ---- línea vertical "ahora" (referencia de tiempo presente) ----
   const xa = X(d.ts);
   ctx.strokeStyle = 'rgba(242,169,59,.5)';
