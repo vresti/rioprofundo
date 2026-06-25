@@ -715,15 +715,32 @@ function dibujar(d, horaActual, nivelActual, estimAhora) {
     });
   }
 
-  // ---- TRAMO PROYECTADO: del último dato real al "ahora", siguiendo la
-  // forma de la marea (astronómica + anomalía vigente). Punteado naranja =
-  // "esto es proyección, no medición". Solo si hay estimación válida (<3h). ----
-  if (estimAhora != null && horaActual != null && real.length) {
+  // ---- TRAMO MEDIDO -> AHORA: con la FORMA DEL MOTOR (retroproyección).
+  // Reemplaza el viejo relleno sinusoidal (que metía la "V" fantasma): arranca en
+  // el dato medido del INA y termina en el presente, siguiendo a La Plata. Si no
+  // hay retro (motor caído / INA viejo), cae al relleno sinusoidal de antes. ----
+  const retro = d.presente && d.presente.proyeccion && d.presente.proyeccion.retro;
+  if (retro && retro.length > 1) {
+    ctx.beginPath();
+    retro.forEach((p, i) => {
+      const x = X(p.t), y = Y(p.valor);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.strokeStyle = '#f2a93b';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // punto al final (nivel del presente)
+    const finR = retro[retro.length - 1];
+    ctx.beginPath(); ctx.arc(X(finR.t), Y(finR.valor), 4, 0, 7);
+    ctx.fillStyle = '#f2a93b'; ctx.fill();
+  } else if (estimAhora != null && horaActual != null && real.length) {
+    // FALLBACK: relleno sinusoidal de siempre (sólo si el motor no dio retro)
     const ult = real[real.length - 1];
     const difVig = ult.h - astronEn(d, ult.t);   // anomalía que mantenemos
     ctx.beginPath();
     let primero = true;
-    // dibujamos punto a punto desde el último real hasta ahora, paso 15 min
     for (let t = ult.t; t <= d.ts; t += 15 * 60 * 1000) {
       const ast = astronEn(d, t);
       if (ast == null) continue;
@@ -731,14 +748,12 @@ function dibujar(d, horaActual, nivelActual, estimAhora) {
       const x = X(t), y = Y(hProj);
       if (primero) { ctx.moveTo(x, y); primero = false; } else { ctx.lineTo(x, y); }
     }
-    // aseguramos terminar exactamente en (ahora, estimAhora)
     ctx.lineTo(X(d.ts), Y(estimAhora));
     ctx.strokeStyle = '#f2a93b';
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 4]);
     ctx.stroke();
     ctx.setLineDash([]);
-    // punto al final (nivel calculado ahora)
     ctx.beginPath(); ctx.arc(X(d.ts), Y(estimAhora), 4, 0, 7);
     ctx.fillStyle = '#f2a93b'; ctx.fill();
   }
