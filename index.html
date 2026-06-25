@@ -663,6 +663,15 @@ function dibujar(d, horaActual, nivelActual, estimAhora) {
   const t0 = marea[0].t, t1 = marea[marea.length-1].t;
   let hMin = Infinity, hMax = -Infinity;
   marea.concat(real).forEach(p => { if(p.h<hMin)hMin=p.h; if(p.h>hMax)hMax=p.h; });
+  // incluir la proyección a futuro y la retro en el rango, para que el eje se
+  // estire lo justo y la curva entre siempre (en bajantes y crecientes fuertes).
+  const _pr = d.presente && d.presente.proyeccion;
+  if (_pr) {
+    [].concat(_pr.puntos || [], _pr.retro || []).forEach(p => {
+      if (p.valor < hMin) hMin = p.valor;
+      if (p.valor > hMax) hMax = p.valor;
+    });
+  }
   const margen = (hMax - hMin) * 0.15 || 0.3;
   hMin -= margen; hMax += margen;
 
