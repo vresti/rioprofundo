@@ -743,42 +743,62 @@ function dibujar(d, horaActual, nivelActual, estimAhora) {
     ctx.fillStyle = '#f2a93b'; ctx.fill();
   }
 
-  // ---- PROYECCIÓN A FUTURO (motor de Hidroprobe): del ahora hacia +2h30,
-  // anclada al presente y siguiendo a La Plata. Mismo naranja punteado que la
-  // proyección al ahora, pero se DESVANECE con la firmeza: nítido cerca del
-  // ahora, difuso hacia el final (más incertidumbre cuanto más lejos). ----
+  // ---- PROYECCIÓN A FUTURO (motor de Hidroprobe): del "ahora" hacia +2h30,
+  // anclada al presente y siguiendo a La Plata. Arranca EXACTO en el punto
+  // "ahora" (se lee como su continuación) y se DESVANECE hacia el final —trazo
+  // que se afina + opacidad que cae— : cuanto más lejos, más fantasma. ----
   const proy = d.presente && d.presente.proyeccion;
-  if (proy && proy.ok && proy.puntos && proy.puntos.length > 1) {
-    const pts = proy.puntos;
-    ctx.lineWidth = 2;
+  if (proy && proy.ok && proy.puntos && proy.puntos.length > 1 && estimAhora != null) {
+    // secuencia anclada en el dot "ahora" (reemplaza el 1er punto por el real)
+    const seq = [{ t: d.ts, valor: estimAhora, firmeza: 1 }].concat(proy.puntos.slice(1));
+    const n = seq.length;
     ctx.setLineDash([5, 4]);
-    // segmento a segmento, variando la opacidad con la firmeza del punto
-    for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1], b = pts[i];
-      const alpha = (b.firmeza != null ? b.firmeza : 1);
-      ctx.strokeStyle = 'rgba(242,169,59,' + alpha + ')';
+    ctx.lineCap = 'round';
+    for (let i = 1; i < n; i++) {
+      const a = seq[i - 1], b = seq[i];
+      const f = (b.firmeza != null ? b.firmeza : 1);
+      const g = f * f;                                  // gamma: realza el difuso
+      ctx.strokeStyle = 'rgba(242,169,59,' + Math.max(g, 0.12).toFixed(3) + ')';
+      ctx.lineWidth = 1.4 + 1.8 * g;                    // 3.2 px cerca -> 1.6 px lejos
       ctx.beginPath();
       ctx.moveTo(X(a.t), Y(a.valor));
       ctx.lineTo(X(b.t), Y(b.valor));
       ctx.stroke();
     }
     ctx.setLineDash([]);
-    // punto + etiqueta al final del horizonte
-    const fin = pts[pts.length - 1];
+    ctx.lineCap = 'butt';
+
+    // punto al final del horizonte
+    const fin = seq[n - 1];
+    const ff = (fin.firmeza || 0.5) * (fin.firmeza || 0.5);
     const xf = X(fin.t), yf = Y(fin.valor);
-    ctx.globalAlpha = Math.max(fin.firmeza || 0.5, 0.45);
+    ctx.globalAlpha = Math.max(ff, 0.3);
     ctx.beginPath(); ctx.arc(xf, yf, 3.5, 0, 7);
     ctx.fillStyle = '#f2a93b'; ctx.fill();
     ctx.globalAlpha = 1;
+
+    // etiqueta "+Xh · ~Y m" con pastilla oscura detrás (legible sobre la cian)
     const hh = Math.floor(fin.min / 60), mm = fin.min % 60;
-    const cuando = hh ? ('+' + hh + 'h' + (mm ? (mm < 10 ? '0' : '') + mm : ''))
-                      : ('+' + mm + ' min');
-    ctx.fillStyle = 'rgba(242,169,59,.9)';
+    const txt = (hh ? ('+' + hh + 'h' + (mm ? (mm < 10 ? '0' : '') + mm : ''))
+                    : ('+' + mm + ' min')) + ' · ~' + fin.valor.toFixed(2) + ' m';
     ctx.font = '600 10px "Spline Sans Mono", monospace';
-    const derecha = xf > W - 95;
-    ctx.textAlign = derecha ? 'right' : 'left';
-    ctx.fillText(cuando + ' · ~' + fin.valor.toFixed(2) + ' m',
-                 derecha ? xf - 6 : xf + 6, yf - 8);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(txt).width, padX = 6, padY = 4, gap = 10;
+    let tx = xf + gap;                                  // por defecto, a la derecha
+    if (tx + tw + padX * 2 > W - padR) tx = xf - gap - tw - padX * 2;  // si no entra, izq
+    const ty = yf - 15;
+    const bx = tx - padX, by = ty - 8 - padY, bw = tw + padX * 2, bh = 16 + padY * 2;
+    // conector sutil punto -> pastilla
+    ctx.strokeStyle = 'rgba(242,169,59,.4)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xf, yf); ctx.lineTo(tx + tw / 2, by + bh); ctx.stroke();
+    // pastilla
+    ctx.fillStyle = 'rgba(6,20,31,.85)';
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 5); ctx.fill(); }
+    else ctx.fillRect(bx, by, bw, bh);
+    // texto
+    ctx.fillStyle = 'rgba(242,169,59,.95)';
+    ctx.fillText(txt, tx, by + bh / 2);
+    ctx.textBaseline = 'alphabetic';
   }
 
   // ---- línea vertical "ahora" (referencia de tiempo presente) ----
