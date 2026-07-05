@@ -62,11 +62,30 @@
   // que sirve el dato en milisegundos. El Worker llama al GAS por detrás.
   const URL_GAS = 'https://restless-smoke-596c.vresti.workers.dev/';
   const REFRESH_MIN = 5;   // auto-refresco del tablero [minutos]
+
+  // Arranque anticipado del pedido: disparamos el fetch apenas se conoce la URL,
+  // en paralelo al parseo del resto del HTML/CSS. Así no perdemos el tiempo de
+  // parseo antes de pedir el dato. cargar() reusa esta promesa en su 1ª corrida.
+  try { window.__rpPrefetch = fetch(URL_GAS, { redirect: 'follow', cache: 'no-store' }); } catch (e) {}
 </script>
 
+<!-- Fuentes: preconnect + carga NO bloqueante. Antes iban por @import dentro
+     del <style>, que serializa la descarga (el navegador baja el CSS principal,
+     lo parsea, recién ahí descubre el @import y pide OTRO CSS y las fuentes).
+     Ahora abrimos la conexión a Google Fonts apenas se parsea el <head> y bajamos
+     el CSS en paralelo sin frenar el pintado (el texto ya usa display=swap). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
+<noscript>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
+</noscript>
+
 <style>
-  /* ---- Tipografía con carácter (cargada de Google Fonts) ---- */
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap');
 
   :root {
     --abismo:   #06141f;   /* fondo más profundo */
@@ -422,23 +441,59 @@ function flechaDesdeDireccion(dir) {
     </svg>`;
 }
 
+// ---- Memoria local del último dato bueno (pintado instantáneo) --------------
+// Guardamos el último JSON válido en localStorage. Al abrir la página lo pintamos
+// AL INSTANTE (marcado "actualizando…") mientras pedimos el fresco. Así, aunque
+// la caché del Worker esté fría (y el origen tarde varios segundos), el visitante
+// ve el nivel del río de entrada en vez de quedarse en "Sondando el río…".
+const LS_CLAVE = 'rp_ultimo_json';
+const LS_VIGENCIA_MS = 6 * 3600 * 1000;   // no pintamos de cache algo > 6 h
+
+function guardarEnCache(data) {
+  try { localStorage.setItem(LS_CLAVE, JSON.stringify({ ts: data.ts, data: data })); } catch (e) {}
+}
+function pintarDesdeCache() {
+  try {
+    const crudo = localStorage.getItem(LS_CLAVE);
+    if (!crudo) return false;
+    const guardado = JSON.parse(crudo);
+    if (!guardado || !guardado.data) return false;
+    // no mostrar algo demasiado viejo (evita ofrecer un nivel de hace días)
+    if (guardado.ts && (Date.now() - guardado.ts) > LS_VIGENCIA_MS) return false;
+    render(guardado.data, /*esCache=*/true);
+    return true;
+  } catch (e) { return false; }
+}
+
 async function cargar() {
   try {
+    // 1ª corrida: reusamos el fetch anticipado disparado en el <head>.
     // cache:'no-store' -> el navegador siempre le pregunta al Worker (no usa su
-    // caché local). El Worker igual responde desde su caché de borde de 5 min,
-    // así la cuota de GAS sigue protegida; solo evitamos JSON viejo del navegador.
-    const r = await fetch(URL_GAS, { redirect: 'follow', cache: 'no-store' });
+    // caché local). El Worker igual responde desde su caché de borde, así la cuota
+    // de GAS sigue protegida; solo evitamos JSON viejo del navegador.
+    const r = await (window.__rpPrefetch || fetch(URL_GAS, { redirect: 'follow', cache: 'no-store' }));
+    window.__rpPrefetch = null;
     const data = await r.json();
     if (!data || data.error || !data.ok) throw new Error('respuesta inválida');
+    guardarEnCache(data);
     render(data);
   } catch (e) {
-    document.getElementById('contenido').innerHTML =
-      '<div class="msg error">No se pudo leer el río ahora mismo.<br>Reintentando en un momento…</div>';
+    // Si ya hay algo pintado (desde la cache local), NO lo tapamos con el error:
+    // dejamos el último nivel conocido a la vista y reintentamos por detrás.
+    if (!document.querySelector('.ahora')) {
+      document.getElementById('contenido').innerHTML =
+        '<div class="msg error">No se pudo leer el río ahora mismo.<br>Reintentando en un momento…</div>';
+    }
     setTimeout(cargar, 30000); // reintento a los 30 s
   }
 }
 
-function render(d) {
+function render(d, esCache) {
+  // Marca sutil cuando lo que mostramos viene de la memoria local (todavía no
+  // llegó el fresco del Worker). Desaparece sola al entrar el dato fresco.
+  const notaActualizando = esCache
+    ? ' <span style="color:var(--niebla);opacity:.7;font-size:.72em;letter-spacing:.02em">· actualizando…</span>'
+    : '';
   // ---- nivel actual: último punto real, o la astronómica en "ahora" ----
   const real = (d.real || []).filter(p => p.h != null);
   const ultimo = real.length ? real[real.length - 1] : null;
@@ -475,12 +530,12 @@ function render(d) {
 
   let etiquetaGrande, medidoTxt;
   if (hayPresente) {
-    etiquetaGrande = `<div class="estimado">calculado ahora</div>`;
+    etiquetaGrande = `<div class="estimado">calculado ahora${notaActualizando}</div>`;
     medidoTxt = (nivelActual != null)
       ? `<div class="medido">último medido · <b>${nivelActual.toFixed(2)} m</b></div>`
       : '';
   } else {
-    etiquetaGrande = `<div class="estimado" style="opacity:.6">último dato medido</div>`;
+    etiquetaGrande = `<div class="estimado" style="opacity:.6">último dato medido${notaActualizando}</div>`;
     medidoTxt = '';
   }
 
@@ -865,6 +920,7 @@ function dibujar(d, horaActual, nivelActual, estimAhora) {
   }
 }
 
+pintarDesdeCache();   // pinta al instante el último nivel conocido (si lo hay)
 cargar();
 setInterval(cargar, REFRESH_MIN * 60 * 1000);
 </script>
