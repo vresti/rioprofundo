@@ -69,23 +69,39 @@
   try { window.__rpPrefetch = fetch(URL_GAS, { redirect: 'follow', cache: 'no-store' }); } catch (e) {}
 </script>
 
-<!-- Fuentes: preconnect + carga NO bloqueante. Antes iban por @import dentro
-     del <style>, que serializa la descarga (el navegador baja el CSS principal,
-     lo parsea, recién ahí descubre el @import y pide OTRO CSS y las fuentes).
-     Ahora abrimos la conexión a Google Fonts apenas se parsea el <head> y bajamos
-     el CSS en paralelo sin frenar el pintado (el texto ya usa display=swap). -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" as="style"
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all'"
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
-<noscript>
-  <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
-</noscript>
+<!-- Fuentes AUTO-ALOJADAS (self-host): los .woff2 viven en /fonts, servidos por
+     el mismo GitHub Pages. Sin dependencia de Google Fonts: cero DNS/TLS extra a
+     fonts.gstatic.com, cero terceros (privacidad), y misma-CDN que el HTML. Los
+     @font-face están en el <style> de abajo. Precargamos el subset 'latin' de cada
+     familia (el que se usa casi siempre) para que la tipografía final entre cuanto
+     antes. crossorigin es obligatorio incluso same-origin (las fuentes van en modo
+     CORS). Si algún día se cambian los .woff2, romper caché renombrando el archivo. -->
+<link rel="preload" href="fonts/fraunces-latin.woff2"    as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/spline-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
 
 <style>
+  /* ---- Tipografía auto-alojada. Son fuentes VARIABLES: un solo .woff2 por
+     subconjunto cubre todos los pesos (por eso font-weight es un rango). ---- */
+  @font-face {
+    font-family: 'Fraunces'; font-style: normal; font-weight: 400 900; font-display: swap;
+    src: url('fonts/fraunces-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: 'Fraunces'; font-style: normal; font-weight: 400 900; font-display: swap;
+    src: url('fonts/fraunces-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: 'Spline Sans Mono'; font-style: normal; font-weight: 400 600; font-display: swap;
+    src: url('fonts/spline-mono-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: 'Spline Sans Mono'; font-style: normal; font-weight: 400 600; font-display: swap;
+    src: url('fonts/spline-mono-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
 
   :root {
     --abismo:   #06141f;   /* fondo más profundo */
@@ -465,18 +481,27 @@ function pintarDesdeCache() {
   } catch (e) { return false; }
 }
 
+let _enVuelo = false;       // evita encimar pedidos (varios disparadores a la vez)
+let _ultimaCargaOk = 0;     // ts del último fetch exitoso (para el freno de reintento)
+
 async function cargar() {
+  if (_enVuelo) return;     // ya hay un pedido en curso: no lo dupliquemos
+  _enVuelo = true;
   try {
-    // 1ª corrida: reusamos el fetch anticipado disparado en el <head>.
+    // 1ª corrida: reusamos el fetch anticipado disparado en el <head>. Lo
+    // consumimos UNA sola vez (lo anulamos antes del await), así un prefetch que
+    // haya fallado no se reusa en los reintentos.
+    const prefetch = window.__rpPrefetch;
+    window.__rpPrefetch = null;
     // cache:'no-store' -> el navegador siempre le pregunta al Worker (no usa su
     // caché local). El Worker igual responde desde su caché de borde, así la cuota
     // de GAS sigue protegida; solo evitamos JSON viejo del navegador.
-    const r = await (window.__rpPrefetch || fetch(URL_GAS, { redirect: 'follow', cache: 'no-store' }));
-    window.__rpPrefetch = null;
+    const r = await (prefetch || fetch(URL_GAS, { redirect: 'follow', cache: 'no-store' }));
     const data = await r.json();
     if (!data || data.error || !data.ok) throw new Error('respuesta inválida');
     guardarEnCache(data);
     render(data);
+    _ultimaCargaOk = Date.now();
   } catch (e) {
     // Si ya hay algo pintado (desde la cache local), NO lo tapamos con el error:
     // dejamos el último nivel conocido a la vista y reintentamos por detrás.
@@ -485,6 +510,8 @@ async function cargar() {
         '<div class="msg error">No se pudo leer el río ahora mismo.<br>Reintentando en un momento…</div>';
     }
     setTimeout(cargar, 30000); // reintento a los 30 s
+  } finally {
+    _enVuelo = false;
   }
 }
 
@@ -919,6 +946,24 @@ function dibujar(d, horaActual, nivelActual, estimAhora) {
     ctx.strokeStyle = 'rgba(242,169,59,.35)'; ctx.lineWidth = 1.5; ctx.stroke();
   }
 }
+
+// ---- Refresco al VOLVER a la pantalla --------------------------------------
+// Los navegadores móviles PAUSAN los timers en segundo plano: al reabrir la
+// pestaña/app se veía el dato viejo hasta tirar de "pull to refresh". Ahora, cada
+// vez que la página vuelve a estar visible (o gana foco), pedimos el dato fresco.
+function refrescarAlVolver() {
+  if (Date.now() - _ultimaCargaOk < 15000) return;   // ya cargamos hace <15 s
+  cargar();
+}
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'visible') refrescarAlVolver();
+});
+window.addEventListener('focus', refrescarAlVolver);
+window.addEventListener('pageshow', function (e) {
+  // restaurada desde el back-forward cache: el JS quedó congelado con datos
+  // viejos, así que forzamos recarga (sin el freno de 15 s).
+  if (e.persisted) cargar();
+});
 
 pintarDesdeCache();   // pinta al instante el último nivel conocido (si lo hay)
 cargar();
