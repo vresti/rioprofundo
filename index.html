@@ -611,6 +611,7 @@ function render(d, esCache) {
       <span><i class="swatch" style="background:var(--cian)"></i> Marea astronómica</span>
       <span><i class="swatch dot" style="background:var(--espuma)"></i> Nivel real (INA)</span>
       <span><i class="swatch" style="background:var(--ambar);border-bottom:2px dotted var(--ambar);background:none;height:0"></i> Proyección actual</span>
+      <span style="opacity:.6"><i class="swatch" style="background:var(--ambar);border-bottom:2px dotted var(--ambar);background:none;height:0"></i> Pronóstico +12&nbsp;h</span>
     </div>
 
     <div class="instrumentos">
@@ -750,6 +751,14 @@ function dibujar(d, horaActual, nivelActual, estimAhora) {
   const _pr = d.presente && d.presente.proyeccion;
   if (_pr) {
     [].concat(_pr.puntos || [], _pr.retro || []).forEach(p => {
+      if (p.valor < hMin) hMin = p.valor;
+      if (p.valor > hMax) hMax = p.valor;
+    });
+  }
+  // incluir también la proyección larga (+12h) para que el eje la contenga
+  const _prL = d.presente && d.presente.proyeccion_larga;
+  if (_prL && _prL.puntos) {
+    _prL.puntos.forEach(p => {
       if (p.valor < hMin) hMin = p.valor;
       if (p.valor > hMax) hMax = p.valor;
     });
@@ -905,6 +914,48 @@ function dibujar(d, horaActual, nivelActual, estimAhora) {
     ctx.fillStyle = 'rgba(242,169,59,.95)';
     ctx.fillText(txt, tx, by + bh / 2);
     ctx.textBaseline = 'alphabetic';
+  }
+
+  // ---- PROYECCIÓN LARGA (outlook +12h de Hidroprobe): SÓLO el tramo más allá de
+  // la proy corta, más tenue y fino (menos certeza). Opacidad = firmeza: nítido en
+  // el empalme, fantasma hacia +12h. Es DIRECCIONAL (no de centímetro). ----
+  const proyL = d.presente && d.presente.proyeccion_larga;
+  if (proyL && proyL.ok && proyL.puntos && proyL.puntos.length > 1) {
+    const cortaFin = (proy && proy.ok && proy.puntos && proy.puntos.length)
+      ? proy.puntos[proy.puntos.length - 1] : null;
+    const desdeMin = cortaFin ? cortaFin.min : -1;
+    let larga = proyL.puntos.filter(p => p.min > desdeMin);
+    if (cortaFin) larga = [{ t: cortaFin.t, valor: cortaFin.valor, firmeza: cortaFin.firmeza }].concat(larga);
+    if (larga.length > 1) {
+      ctx.setLineDash([2, 5]);
+      ctx.lineCap = 'round';
+      for (let i = 1; i < larga.length; i++) {
+        const a = larga[i - 1], b = larga[i];
+        const f = (b.firmeza != null ? b.firmeza : 0.3);
+        ctx.strokeStyle = 'rgba(242,169,59,' + Math.max(f, 0.10).toFixed(3) + ')';
+        ctx.lineWidth = 1.0 + 1.0 * f;
+        ctx.beginPath();
+        ctx.moveTo(X(a.t), Y(a.valor));
+        ctx.lineTo(X(b.t), Y(b.valor));
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.lineCap = 'butt';
+      // etiqueta tenue al final del outlook (+Xh · ~Y m)
+      const fL = larga[larga.length - 1];
+      const xL = X(fL.t), yL = Y(fL.valor);
+      ctx.beginPath(); ctx.arc(xL, yL, 2.6, 0, 7); ctx.fillStyle = 'rgba(242,169,59,.8)'; ctx.fill();
+      const txtL = '+' + Math.round(fL.min / 60) + 'h · ~' + fL.valor.toFixed(2) + ' m';
+      ctx.font = '10px "Spline Sans Mono", monospace';
+      ctx.fillStyle = 'rgba(242,169,59,.7)';
+      ctx.textBaseline = 'middle';
+      const twL = ctx.measureText(txtL).width;
+      let txL = xL - twL - 8;                          // por defecto a la izquierda del punto
+      if (txL < padL + 2) txL = xL + 8;                // si no entra, a la derecha
+      ctx.textAlign = 'left';
+      ctx.fillText(txtL, txL, yL);
+      ctx.textBaseline = 'alphabetic';
+    }
   }
 
   // ---- línea vertical "ahora" (referencia de tiempo presente) ----
