@@ -223,6 +223,7 @@
   .ley-fila.prono { color: var(--ambar); }
   .ley-fila.prono b { color: var(--espuma); font-weight: 600; }
   .ley-fila.prono .ec { color: var(--niebla); font-style: normal; font-weight: 400; }
+  .ley-fila.prono .ext-etq { font-weight: 600; }
 
   /* ---- Compactación en celular (menos aire, menos renglones) ---- */
   @media (max-width: 560px) {
@@ -615,17 +616,18 @@ function render(d, esCache) {
     const h = Math.floor(min / 60), m = min % 60;
     return 'en ~' + h + ' h' + (m >= 8 ? ' ' + m + ' min' : '');
   }
-  function extremoSpan(e, flecha, etq) {
-    return `<span>${flecha}&nbsp;${etq} <b>${fmtHora(e.t)}&nbsp;hs · ${e.valor.toFixed(2)}&nbsp;m</b> <i class="ec">${enCuanto(e.t)}</i></span>`;
+  function extremoSpan(e, flecha, etq, color) {
+    return `<span><span class="ext-etq" style="color:${color}">${flecha}&nbsp;${etq}</span> <b>${fmtHora(e.t)}&nbsp;hs · ${e.valor.toFixed(2)}&nbsp;m</b> <i class="ec">${enCuanto(e.t)}</i></span>`;
   }
   const _ex = d.extremos;
   let pronoCompactoHtml = '';
   if (_ex && (_ex.proximo_min || _ex.proximo_max)) {
     const items = [];
-    if (_ex.proximo_min) items.push({ e: _ex.proximo_min, flecha: '▼', etq: 'bajamar' });
-    if (_ex.proximo_max) items.push({ e: _ex.proximo_max, flecha: '▲', etq: 'pleamar' });
+    // Color semántico del sitio: bajamar = verde (nivel bajo), pleamar = ámbar (nivel alto).
+    if (_ex.proximo_min) items.push({ e: _ex.proximo_min, flecha: '▼', etq: 'bajamar', color: 'var(--verde)' });
+    if (_ex.proximo_max) items.push({ e: _ex.proximo_max, flecha: '▲', etq: 'pleamar', color: 'var(--ambar)' });
     items.sort((a, b) => a.e.t - b.e.t);   // orden cronológico: el que ocurra primero, primero
-    pronoCompactoHtml = `<div class="ley-fila prono">${items.map(it => extremoSpan(it.e, it.flecha, it.etq)).join('')}</div>`;
+    pronoCompactoHtml = `<div class="ley-fila prono">${items.map(it => extremoSpan(it.e, it.flecha, it.etq, it.color)).join('')}</div>`;
   }
 
   document.getElementById('contenido').innerHTML = `
