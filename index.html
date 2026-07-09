@@ -222,6 +222,7 @@
                  border-bottom: 2px dotted var(--ambar); }
   .ley-fila.prono { color: var(--ambar); }
   .ley-fila.prono b { color: var(--espuma); font-weight: 600; }
+  .ley-fila.prono .ec { color: var(--niebla); font-style: normal; font-weight: 400; }
 
   /* ---- Compactación en celular (menos aire, menos renglones) ---- */
   @media (max-width: 560px) {
@@ -601,26 +602,31 @@ function render(d, esCache) {
   const cuadTxt = v.cuadrante === 'SE' ? 'Sudestada (SE)'
                 : v.cuadrante === 'NO' ? 'Bajante (NO)' : 'Sin componente crítica';
 
-  // ---- Pronóstico compacto (lectura de texto, sobre todo para celular): nivel
-  // a +6 h y +12 h, tomado de la proyección larga de Hidroprobe (el punto más
-  // cercano a cada horizonte). Si no hay proyección larga, no se muestra. ----
-  function valorProyA(min) {
-    const pl = d.presente && d.presente.proyeccion_larga;
-    if (!pl || !pl.ok || !pl.puntos || !pl.puntos.length) return null;
-    let mejor = null, dmin = Infinity;
-    for (const p of pl.puntos) {
-      const dd = Math.abs((p.min != null ? p.min : 0) - min);
-      if (dd < dmin) { dmin = dd; mejor = p; }
-    }
-    return mejor ? mejor.valor : null;
+  // ---- Pronóstico compacto: PRÓXIMOS EXTREMOS (bajamar / pleamar) anclados al
+  // EVENTO, no a "+6h" (que se desliza con el reloj y no se puede correlacionar
+  // con la navegación ni con el aviso). El backend ya los detecta en d.extremos
+  // (punto de vuelta REAL, no el borde de la ventana). El "en X" lo calculamos
+  // acá desde el t absoluto vs ahora, así queda exacto y se actualiza solo. Si un
+  // lado no tiene vuelta a la vista, viene null y simplemente no se muestra. ----
+  function enCuanto(t) {
+    const min = Math.round((t - d.ts) / 60000);
+    if (min <= 1) return 'ahora';
+    if (min < 60) return 'en ~' + min + ' min';
+    const h = Math.floor(min / 60), m = min % 60;
+    return 'en ~' + h + ' h' + (m >= 8 ? ' ' + m + ' min' : '');
   }
-  const p6 = valorProyA(360), p12 = valorProyA(720);
-  const pronoCompactoHtml = (p6 != null || p12 != null)
-    ? `<div class="ley-fila prono">
-         ${p6  != null ? `<span>+6&nbsp;h <b>~${p6.toFixed(2)}&nbsp;m</b></span>`  : ''}
-         ${p12 != null ? `<span>+12&nbsp;h <b>~${p12.toFixed(2)}&nbsp;m</b></span>` : ''}
-       </div>`
-    : '';
+  function extremoSpan(e, flecha, etq) {
+    return `<span>${flecha}&nbsp;${etq} <b>${fmtHora(e.t)}&nbsp;hs · ${e.valor.toFixed(2)}&nbsp;m</b> <i class="ec">${enCuanto(e.t)}</i></span>`;
+  }
+  const _ex = d.extremos;
+  let pronoCompactoHtml = '';
+  if (_ex && (_ex.proximo_min || _ex.proximo_max)) {
+    const items = [];
+    if (_ex.proximo_min) items.push({ e: _ex.proximo_min, flecha: '▼', etq: 'bajamar' });
+    if (_ex.proximo_max) items.push({ e: _ex.proximo_max, flecha: '▲', etq: 'pleamar' });
+    items.sort((a, b) => a.e.t - b.e.t);   // orden cronológico: el que ocurra primero, primero
+    pronoCompactoHtml = `<div class="ley-fila prono">${items.map(it => extremoSpan(it.e, it.flecha, it.etq)).join('')}</div>`;
+  }
 
   document.getElementById('contenido').innerHTML = `
     <div class="ahora">
