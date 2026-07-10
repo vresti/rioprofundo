@@ -204,6 +204,11 @@
     letter-spacing: .03em;
   }
   .medido b { color: var(--espuma); font-weight: 600; }
+  .residual {
+    margin-top: 7px; font-size: .82rem; font-weight: 600;
+    letter-spacing: .02em; line-height: 1.3;
+  }
+  .residual .res-cual { color: var(--niebla); font-weight: 400; }
 
   /* ---- Lienzo de la curva ---- */
   .grafico-cont { position: relative; width: 100%; }
@@ -533,6 +538,18 @@ async function cargar() {
   }
 }
 
+// Califica el apartamiento respecto de la astronómica según la escala REAL medida
+// sobre 5+ semanas del Historial (desvío ~65 cm; |res|≥20 cm el 73% del tiempo →
+// es el fondo, ≥50 notable, ≥80 fuerte, ≥140 es p95). Sin esta escala, el número
+// solo engaña: "20 cm" suena mucho y es casi siempre verdad.
+function calificarResidual(absCm) {
+  if (absCm < 20)  return 'leve';
+  if (absCm < 50)  return 'moderado';
+  if (absCm < 80)  return 'notable';
+  if (absCm < 140) return 'fuerte';
+  return 'extremo';
+}
+
 function render(d, esCache) {
   // Marca sutil cuando lo que mostramos viene de la memoria local (todavía no
   // llegó el fresco del Worker). Desaparece sola al entrar el dato fresco.
@@ -584,6 +601,30 @@ function render(d, esCache) {
     medidoTxt = '';
   }
 
+  // ---- RÓTULO DESCRIPTIVO: cuánto está el río SOBRE / BAJO la astronómica ----
+  // El residual meteorológico (real − astronómica) es donde vive TODA la señal
+  // del clima; la astronómica es determinística. Lo referimos al valor grande que
+  // se muestra (el 'calculado ahora' del motor) para que rótulo y número grande
+  // cuenten lo mismo; si no hay presente, cae al último medido (dif). Ámbar =
+  // arriba (creciente), verde = abajo (bajante): mismos colores que el relleno.
+  let residualTxt = '';
+  let resM = dif;                                   // fallback: último medido vs astronómica en su hora
+  if (hayPresente) {
+    const astNow = astronEn(d, d.ts);
+    if (astNow != null) resM = valorGrande - astNow;
+  }
+  if (resM != null) {
+    const cm = Math.round(resM * 100), abs = Math.abs(cm);
+    if (abs < 8) {
+      residualTxt = `<div class="residual" style="color:var(--niebla)">≈ en línea con la astronómica</div>`;
+    } else {
+      const arriba = cm > 0;
+      residualTxt = `<div class="residual" style="color:${arriba ? 'var(--ambar)' : 'var(--verde)'}">`
+        + `${arriba ? '▲' : '▼'} ${abs} cm ${arriba ? 'sobre' : 'bajo'} la astronómica`
+        + ` <span class="res-cual">· ${calificarResidual(abs)}</span></div>`;
+    }
+  }
+
   // ---- FLECHA DE TENDENCIA: derivada de la curva "calculado ahora" ----
   // Comparamos el nivel proyectado AHORA contra el de hace 30 min, sobre la
   // misma curva (astronómica + anomalía vigente). La pendiente (cm/30min) define
@@ -629,6 +670,13 @@ function render(d, esCache) {
     items.sort((a, b) => a.e.t - b.e.t);   // orden cronológico: el que ocurra primero, primero
     pronoCompactoHtml = `<div class="ley-fila prono">${items.map(it => extremoSpan(it.e, it.flecha, it.etq, it.color)).join('')}</div>`;
   }
+  // Leyenda del punto rojo: solo si hay algún cruce DENTRO de la ventana dibujada.
+  const _mar = (d.marea || []).filter(p => p.h != null);
+  const _t0 = _mar.length ? _mar[0].t : 0, _t1 = _mar.length ? _mar[_mar.length - 1].t : 0;
+  const hayCruces = (d.cruces || []).some(c => c && c.h != null && c.t >= _t0 && c.t <= _t1);
+  const crucesLeyendaHtml = hayCruces
+    ? `<div class="ley-fila"><span><i class="swatch dot" style="background:var(--rojo)"></i> Cruce con la astronómica (cambio de régimen)</span></div>`
+    : '';
 
   document.getElementById('contenido').innerHTML = `
     <div class="ahora">
@@ -640,6 +688,7 @@ function render(d, esCache) {
         </div>
         ${etiquetaGrande}
         ${medidoTxt}
+        ${residualTxt}
       </div>
       <div class="meta">
         <div class="hora">Medido a las ${fmtHora(horaActual)} hs</div>
@@ -659,6 +708,7 @@ function render(d, esCache) {
       <div class="ley-fila">
         <span><i class="swatch dash"></i> Proyectado</span>
       </div>
+      ${crucesLeyendaHtml}
       ${pronoCompactoHtml}
     </div>
 
@@ -1044,6 +1094,21 @@ function dibujar(d, horaActual, nivelActual, estimAhora) {
     ctx.beginPath(); ctx.arc(xm, ym, 11, 0, 7);
     ctx.strokeStyle = 'rgba(242,169,59,.35)'; ctx.lineWidth = 1.5; ctx.stroke();
   }
+
+  // ---- PUNTO ROJO: cruces real↔astronómica (cambio de régimen del clima) ----
+  // Alerta los manda ya filtrados (residual suavizado 12 h, swing ≥15 cm) y anclados
+  // al cruce CRUDO, así el punto cae justo donde el relleno ámbar↔verde cambia de
+  // color. Cada uno marca "desde acá el río se dio vuelta". Se dibujan AL FINAL,
+  // encima de todas las curvas; sólo los que caen dentro de la ventana visible.
+  (d.cruces || []).forEach(c => {
+    if (!c || c.h == null || c.t < t0 || c.t > t1) return;
+    const x = X(c.t), y = Y(c.h);
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, 7);           // halo
+    ctx.fillStyle = 'rgba(232,85,107,.16)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, 4.4, 0, 7);         // punto rojo con aro claro
+    ctx.fillStyle = '#e8556b'; ctx.fill();
+    ctx.strokeStyle = 'rgba(234,246,248,.9)'; ctx.lineWidth = 1.6; ctx.stroke();
+  });
 }
 
 // ---- Refresco al VOLVER a la pantalla --------------------------------------
