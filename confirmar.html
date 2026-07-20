@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confirmar suscripción · Río Profundo</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#06141f">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+<style>
+  @font-face {
+    font-family: 'Fraunces'; font-style: normal; font-weight: 400 900; font-display: swap;
+    src: url('fonts/fraunces-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: 'Spline Sans Mono'; font-style: normal; font-weight: 400 600; font-display: swap;
+    src: url('fonts/spline-mono-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  :root {
+    --abismo:#06141f; --agua:#0a2540; --cian:#5fd4e6;
+    --espuma:#eaf6f8; --niebla:#8fb2c4; --rojo:#e8556b; --verde:#4fd1a5;
+    --linea:rgba(143,178,196,.18); --vidrio:rgba(14,51,84,.55);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:'Spline Sans Mono',monospace;
+    background:radial-gradient(ellipse 120% 80% at 50% -10%, var(--agua) 0%, var(--abismo) 70%), var(--abismo);
+    background-attachment:fixed; color:var(--espuma); min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    padding:clamp(14px,3vw,32px); -webkit-font-smoothing:antialiased;
+  }
+  .caja {
+    max-width:32rem; text-align:center;
+    background:var(--vidrio); border:1px solid var(--linea); border-radius:16px;
+    padding:32px 28px;
+  }
+  h1 {
+    font-family:'Fraunces',serif; font-weight:700;
+    font-size:clamp(1.4rem,4vw,1.8rem); line-height:1.2; margin-bottom:14px;
+  }
+  p { font-size:.88rem; line-height:1.7; color:var(--niebla); margin-bottom:14px; }
+  p:last-child { margin-bottom:0; }
+  a { color:var(--cian); }
+  .bien h1 { color:var(--verde); }
+  .mal h1 { color:var(--rojo); }
+</style>
+</head>
+<body>
+
+<!-- Esta página existe para que el botón del mail apunte a rioprofundo.com y no
+     a workers.dev: un dominio compartido gratuito en un botón "Confirmar" es
+     una señal fuerte de spam, y el mail de confirmación es justo el que TIENE
+     que llegar a la bandeja. La confirmación real la hace el Worker; acá sólo
+     se le delega y se muestra el resultado. -->
+
+<div class="caja" id="caja">
+  <h1 id="t">Confirmando…</h1>
+  <p id="p">Un segundo.</p>
+</div>
+
+<script>
+(function () {
+  var API = 'https://restless-smoke-596c.vresti.workers.dev/confirmar';
+  var caja = document.getElementById('caja');
+  var t = document.getElementById('t');
+  var p = document.getElementById('p');
+
+  function pinta(clase, titulo, texto) {
+    caja.className = 'caja ' + clase;
+    t.textContent = titulo;
+    p.innerHTML = texto + '<br><br><a href="/">Ir a Río Profundo</a>';
+  }
+
+  var token = new URLSearchParams(location.search).get('t') || '';
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) {
+    pinta('mal', 'Link inválido', 'Ese link no es válido o está incompleto. Podés suscribirte otra vez desde la home.');
+    return;
+  }
+
+  fetch(API + '?j=1&t=' + encodeURIComponent(token))
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (j && j.ok) {
+        pinta('bien', 'Suscripción confirmada',
+          'Quedaron confirmados tu mail y tu celular. Te vamos a avisar cuando el río se salga de lo normal — crecientes y bajantes fuertes. Nada más que eso.');
+      } else {
+        pinta('mal', 'No se pudo confirmar', 'Ese link no es válido o ya venció. Probá suscribirte de nuevo.');
+      }
+    })
+    .catch(function () {
+      pinta('mal', 'No se pudo conectar',
+        'Revisá tu conexión y volvé a abrir el link del mail. Si sigue fallando, escribinos a <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>.');
+    });
+})();
+</script>
+</body>
+</html>

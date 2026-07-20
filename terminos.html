@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Términos y privacidad · Río Profundo</title>
+<meta name="description" content="Términos de uso y política de privacidad de Río Profundo: qué datos guardamos, para qué, y los límites del servicio.">
+<link rel="canonical" href="https://rioprofundo.com/terminos.html">
+<meta name="theme-color" content="#06141f">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+<style>
+  @font-face {
+    font-family: 'Fraunces'; font-style: normal; font-weight: 400 900; font-display: swap;
+    src: url('fonts/fraunces-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: 'Spline Sans Mono'; font-style: normal; font-weight: 400 600; font-display: swap;
+    src: url('fonts/spline-mono-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+
+  :root {
+    --abismo:#06141f; --agua:#0a2540; --agua-2:#0e3354; --cian:#5fd4e6;
+    --espuma:#eaf6f8; --niebla:#8fb2c4; --ambar:#f2a93b; --rojo:#e8556b;
+    --verde:#4fd1a5; --linea:rgba(143,178,196,.18); --vidrio:rgba(14,51,84,.55);
+  }
+
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:'Spline Sans Mono',monospace;
+    background:radial-gradient(ellipse 120% 80% at 50% -10%, var(--agua) 0%, var(--abismo) 70%), var(--abismo);
+    background-attachment:fixed; color:var(--espuma); min-height:100vh;
+    padding:clamp(14px,3vw,32px); -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:760px; margin:0 auto; }
+
+  header { margin-bottom:clamp(18px,3vw,28px); }
+  .volver {
+    display:inline-flex; align-items:center; gap:6px; text-decoration:none;
+    color:var(--cian); font-size:.82rem; letter-spacing:.04em; margin-bottom:16px;
+  }
+  .volver:hover { opacity:.8; }
+  h1 {
+    font-family:'Fraunces',serif; font-weight:900;
+    font-size:clamp(1.8rem,6vw,2.8rem); line-height:1; letter-spacing:-.02em;
+    background:linear-gradient(180deg,var(--espuma),var(--cian));
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  .sub { color:var(--niebla); font-size:clamp(.72rem,2vw,.88rem); letter-spacing:.12em;
+         text-transform:uppercase; margin-top:8px; }
+
+  .seccion {
+    background:var(--vidrio); border:1px solid var(--linea); border-radius:16px;
+    margin-bottom:14px; padding:20px 24px;
+  }
+  h2 {
+    font-family:'Fraunces',serif; font-weight:600; font-size:1.15rem;
+    color:var(--espuma); margin-bottom:12px;
+  }
+  p { font-size:.86rem; line-height:1.75; color:var(--niebla); margin-bottom:12px; }
+  p:last-child { margin-bottom:0; }
+  ul { margin:0 0 12px 1.1rem; }
+  li { font-size:.86rem; line-height:1.75; color:var(--niebla); margin-bottom:6px; }
+  b, strong { color:var(--espuma); font-weight:600; }
+  a { color:var(--cian); }
+
+  .destacado {
+    border-left:3px solid var(--ambar); padding-left:16px; margin:4px 0 14px;
+  }
+  .destacado p { color:var(--espuma); }
+
+  .legal {
+    font-size:.74rem; line-height:1.7; color:rgba(143,178,196,.75);
+    border-top:1px solid var(--linea); padding-top:14px; margin-top:14px;
+  }
+
+  footer {
+    text-align:center; color:var(--niebla); font-size:.7rem;
+    margin-top:28px; letter-spacing:.08em;
+  }
+  footer a { color:var(--niebla); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="volver" href="/">◄ Volver al tablero</a>
+    <h1>Términos y privacidad</h1>
+    <div class="sub">Versión del 20 de julio de 2026</div>
+  </header>
+
+  <div class="seccion">
+    <h2>Qué es Río Profundo</h2>
+    <p>
+      Río Profundo es un servicio <b>informativo y gratuito</b> que estima el nivel del
+      Río de la Plata en la zona de San Fernando y el Delta del Tigre, y avisa por mail
+      cuando se aparta de lo normal (crecientes por sudestada y bajantes marcadas).
+    </p>
+    <p>
+      Los datos se elaboran a partir de fuentes públicas —Instituto Nacional del Agua (INA),
+      Servicio de Hidrografía Naval (SHN), StormGlass y Open-Meteo— combinadas con un modelo
+      propio. <b>No es un servicio oficial</b> ni está afiliado a ninguno de esos organismos.
+    </p>
+  </div>
+
+  <div class="seccion">
+    <h2>Límites del servicio</h2>
+    <div class="destacado">
+      <p>
+        Río Profundo <b>no reemplaza</b> los avisos oficiales del Servicio de Hidrografía Naval
+        ni de la Prefectura Naval Argentina. No tomes decisiones de navegación, amarre,
+        evacuación o seguridad basándote únicamente en esta información.
+      </p>
+    </div>
+    <p>
+      Lo que publicamos es una <b>estimación</b>, y como toda estimación puede equivocarse.
+      El servicio depende de fuentes de terceros que pueden atrasarse, cortarse o publicar
+      datos erróneos, y de infraestructura que puede fallar. No garantizamos exactitud,
+      disponibilidad, ni que los avisos lleguen a tiempo o lleguen del todo.
+    </p>
+    <p>
+      El uso del sitio y de los avisos es <b>bajo tu propia responsabilidad</b>. Río Profundo
+      no se responsabiliza por daños derivados del uso de la información, de errores en ella,
+      o de la falta o demora de un aviso.
+    </p>
+  </div>
+
+  <div class="seccion">
+    <h2>Qué datos guardamos</h2>
+    <p>Si te suscribís a los avisos, guardamos:</p>
+    <ul>
+      <li><b>Tu mail</b> — para mandarte los avisos. Es el único dato imprescindible.</li>
+      <li><b>Tu celular</b> — guardado para poder ofrecerte los avisos por WhatsApp más
+          adelante. <b>Hoy no se usa para nada</b> y no recibe ningún mensaje.</li>
+      <li><b>Tu nombre</b> — opcional, sólo para saludarte.</li>
+      <li><b>Fecha, hora y dirección IP</b> del momento en que te suscribiste, junto con la
+          versión de estos términos que aceptaste. Es el registro de tu consentimiento.</li>
+    </ul>
+    <p>
+      Nada más. <b>No usamos cookies ni herramientas de seguimiento</b>, no medimos tu
+      navegación y no hay analítica de terceros. El sitio guarda en tu navegador la última
+      medición del río para poder mostrártela al instante la próxima vez: es un dato público
+      del nivel del agua, no tiene nada tuyo, y se borra vaciando los datos del navegador.
+    </p>
+  </div>
+
+  <div class="seccion">
+    <h2>Qué hacemos y qué no hacemos con ellos</h2>
+    <p>
+      Tus datos se usan <b>exclusivamente</b> para enviarte los avisos a los que te suscribiste.
+      <b>No los vendemos, no los cedemos ni los compartimos</b> con terceros con fines
+      comerciales, publicitarios ni de ningún otro tipo.
+    </p>
+    <p>
+      Los avisos por mail se envían con la lista <b>en copia oculta</b>: ningún suscriptor ve
+      la dirección de los demás.
+    </p>
+    <p>
+      Para operar usamos servicios de infraestructura (Google Workspace para el envío de mails
+      y el almacenamiento, y Cloudflare para la distribución del sitio), que procesan los datos
+      únicamente por cuenta nuestra y para que el servicio funcione.
+    </p>
+  </div>
+
+  <div class="seccion">
+    <h2>Cómo darte de baja</h2>
+    <p>
+      Cuando quieras y sin dar explicaciones, desde
+      <a href="/baja.html">rioprofundo.com/baja.html</a> o escribiendo a
+      <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>.
+      La baja es inmediata y borra tu dirección de la lista de envío.
+    </p>
+    <p>
+      También podés pedirnos en cualquier momento <b>acceder</b> a los datos que tenemos tuyos,
+      <b>corregirlos</b> o <b>eliminarlos por completo</b>, al mismo correo.
+    </p>
+  </div>
+
+  <div class="seccion">
+    <h2>Avisos por WhatsApp (todavía no disponibles)</h2>
+    <p>
+      Más adelante vamos a ofrecer los avisos por WhatsApp como servicio opcional y pago.
+      Serán una <b>activación voluntaria</b>: nadie va a recibir un WhatsApp por haberse
+      suscripto al mail. Antes de mandarte el primer aviso te vamos a pedir que confirmes
+      el número por ese mismo canal.
+    </p>
+  </div>
+
+  <div class="seccion">
+    <h2>Cambios</h2>
+    <p>
+      Si cambiamos estos términos de forma significativa, te avisamos por mail antes de que
+      empiecen a regir. Cada versión lleva su fecha arriba, y guardamos cuál aceptó cada
+      suscriptor.
+    </p>
+    <p>
+      Contacto: <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>
+    </p>
+
+    <div class="legal">
+      <p>
+        El titular de los datos personales tiene la facultad de ejercer el derecho de acceso
+        a los mismos en forma gratuita a intervalos no inferiores a seis meses, salvo que se
+        acredite un interés legítimo al efecto, conforme lo establecido en el artículo 14,
+        inciso 3 de la Ley N° 25.326.
+      </p>
+      <p>
+        La Agencia de Acceso a la Información Pública, en su carácter de órgano de control de
+        la Ley N° 25.326, tiene la atribución de atender las denuncias y reclamos que
+        interpongan quienes resulten afectados en sus derechos por incumplimiento de las
+        normas vigentes en materia de protección de datos personales.
+      </p>
+    </div>
+  </div>
+
+  <footer>
+    <a href="/">rioprofundo.com</a> · Términos y privacidad
+  </footer>
+
+</div>
+</body>
+</html>

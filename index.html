@@ -338,6 +338,40 @@
   .compartir-t { font-family:'Fraunces',serif; font-weight:600; font-size:1.2rem; color:var(--espuma); }
   .compartir-s { font-size:.8rem; color:var(--niebla); margin-top:4px; line-height:1.5; }
 
+  /* --- Suscripción a los avisos (20/07/2026) ------------------------------ */
+  .sus {
+    margin-top: clamp(22px, 4vw, 36px); padding: 22px 24px;
+    background: var(--vidrio); border: 1px solid var(--linea); border-radius: 14px;
+  }
+  .sus-t { font-family:'Fraunces',serif; font-weight:600; font-size:1.2rem; color:var(--espuma); }
+  .sus-s { font-size:.8rem; color:var(--niebla); margin-top:6px; line-height:1.5; }
+  .sus-form { margin-top:16px; display:flex; flex-direction:column; gap:10px; }
+  .sus-form input[type=text], .sus-form input[type=email], .sus-form input[type=tel] {
+    width:100%; box-sizing:border-box; padding:12px 14px;
+    background:rgba(6,20,31,.6); border:1px solid var(--linea); border-radius:10px;
+    color:var(--espuma); font:inherit; font-size:.95rem;
+  }
+  .sus-form input::placeholder { color:rgba(143,178,196,.55); }
+  .sus-form input:focus { outline:none; border-color:var(--cian); }
+  .sus-fila { display:flex; gap:10px; flex-wrap:wrap; }
+  .sus-fila > * { flex:1 1 12rem; }
+  .sus-ok { display:flex; gap:9px; align-items:flex-start; font-size:.74rem;
+            color:var(--niebla); line-height:1.5; margin-top:2px; }
+  .sus-ok input { margin-top:.2em; flex:none; accent-color:var(--cian); }
+  .sus-ok a { color:var(--cian); }
+  .sus-btn {
+    padding:13px 20px; border:none; border-radius:10px; cursor:pointer;
+    background:var(--cian); color:#06141f; font:inherit; font-weight:700; font-size:.95rem;
+    transition:opacity .2s;
+  }
+  .sus-btn:hover { opacity:.88; }
+  .sus-btn:disabled { opacity:.5; cursor:default; }
+  .sus-msg { font-size:.82rem; line-height:1.5; margin-top:4px; min-height:1.2em; }
+  .sus-msg.err { color:var(--rojo); }
+  .sus-msg.bien { color:var(--verde); }
+  /* Honeypot: invisible para humanos, tentador para bots. */
+  .sus-hp { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+
   footer {
     text-align: center; color: var(--niebla); font-size: .7rem;
     margin-top: 28px; letter-spacing: .08em;
@@ -389,6 +423,52 @@
     <span class="utiles-arr">►</span>
   </a>
 
+  <!-- Suscripción a los avisos por mail (20/07/2026).
+       Postea al Worker (/suscribir), que encola el alta; un trigger de Alerta
+       drena la cola, escribe en `Contactos` y manda el mail de confirmación.
+       Nadie queda suscripto sin clickear ese mail (doble opt-in). -->
+  <section class="sus" id="sus">
+    <div class="sus-t">Avisos de creciente y bajante</div>
+    <div class="sus-s">
+      Te escribimos por mail cuando el río se sale de lo normal en San Fernando y el Delta.
+      Sólo eso: sin novedades, no hay mail.
+    </div>
+
+    <form class="sus-form" id="sus-form" novalidate>
+      <div class="sus-fila">
+        <input type="text"  id="sus-nombre" name="nombre" placeholder="Nombre (opcional)"
+               autocomplete="name" maxlength="80">
+        <input type="email" id="sus-email"  name="email"  placeholder="Tu mail" required
+               autocomplete="email" maxlength="120">
+      </div>
+      <input type="tel" id="sus-tel" name="telefono" required autocomplete="tel"
+             inputmode="numeric" maxlength="25"
+             placeholder="Celular con código de área — ej: 11 3659 7788">
+
+      <!-- Honeypot. Un humano no lo ve; un bot lo completa y lo descartamos. -->
+      <div class="sus-hp" aria-hidden="true">
+        <label>No completar<input type="text" name="web" id="sus-web" tabindex="-1" autocomplete="off"></label>
+      </div>
+
+      <label class="sus-ok">
+        <input type="checkbox" id="sus-acepta" required>
+        <span>
+          Acepto los <a href="/terminos.html" target="_blank" rel="noopener">términos y la política
+          de privacidad</a>. Entiendo que Río Profundo es informativo y <b>no reemplaza</b> los avisos
+          oficiales del SHN ni de Prefectura.
+        </span>
+      </label>
+
+      <button class="sus-btn" type="submit" id="sus-btn">Suscribirme</button>
+      <div class="sus-msg" id="sus-msg" role="status" aria-live="polite"></div>
+    </form>
+
+    <div class="sus-s" style="margin-top:12px">
+      Pedimos el celular para poder ofrecerte los avisos por WhatsApp más adelante.
+      <b>Hoy no recibe nada</b> y no se lo damos a nadie.
+    </div>
+  </section>
+
   <!-- QR para compartir el sitio con amigos -->
   <div class="compartir">
     <img class="qr" alt="Código QR de rioprofundo.com" width="160" height="160"
@@ -404,9 +484,85 @@
     actualizado cada <span id="ref-min">5</span> min
     <br>
     contacto: <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>
+    <br>
+    <a href="/terminos.html">términos y privacidad</a> ·
+    <a href="/baja.html">baja de avisos</a>
   </footer>
 
 </div>
+
+<script>
+// ============================================================================
+//  SUSCRIPCIÓN — bloque APARTE del script del tablero, a propósito.
+//
+//  El script grande de abajo dibuja el canvas y es el corazón de la página: un
+//  error mío acá no tiene por qué apagarle el río a nadie. Por eso va en su
+//  propio <script> y no comparte una sola variable con él.
+//
+//  El POST va con content-type text/plain a propósito: así el pedido es
+//  "simple" para CORS y el navegador NO dispara el preflight OPTIONS (la web
+//  está en rioprofundo.com y el Worker en workers.dev — son orígenes distintos).
+// ============================================================================
+(function () {
+  var API = 'https://restless-smoke-596c.vresti.workers.dev/suscribir';
+  var form = document.getElementById('sus-form');
+  if (!form) return;
+
+  var btn = document.getElementById('sus-btn');
+  var msg = document.getElementById('sus-msg');
+
+  function decir(texto, clase) {
+    msg.textContent = texto;
+    msg.className = 'sus-msg' + (clase ? ' ' + clase : '');
+  }
+
+  form.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+
+    var email  = document.getElementById('sus-email').value.trim();
+    var tel    = document.getElementById('sus-tel').value.trim();
+    var nombre = document.getElementById('sus-nombre').value.trim();
+
+    // Validación mínima del lado del cliente: sólo para no hacer viajar de gusto
+    // lo obviamente incompleto. LA AUTORIDAD ES EL WORKER — replicar acá la
+    // normalización del teléfono sería duplicar una lógica que se despega sola.
+    if (email.indexOf('@') < 1) { decir('Falta el mail.', 'err'); return; }
+    if (tel.replace(/[^0-9]/g, '').length < 8) { decir('Falta el celular.', 'err'); return; }
+    if (!document.getElementById('sus-acepta').checked) {
+      decir('Hay que aceptar los términos para suscribirte.', 'err'); return;
+    }
+
+    btn.disabled = true;
+    decir('Enviando…');
+
+    fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify({
+        email: email, telefono: tel, nombre: nombre,
+        acepta: true,
+        web: document.getElementById('sus-web').value   // honeypot
+      })
+    })
+    .then(function (r) { return r.json().then(function (j) { return { http: r.status, j: j }; }); })
+    .then(function (res) {
+      if (res.j && res.j.ok) {
+        form.innerHTML = '<div class="sus-msg bien" role="status">'
+          + '✅ Listo. Te mandamos un mail a <b>' + email.replace(/[<>&]/g, '') + '</b>: '
+          + 'abrilo y confirmá para empezar a recibir los avisos.<br>'
+          + '<span style="color:var(--niebla)">Si no llega en unos minutos, mirá en spam.</span></div>';
+        return;
+      }
+      decir((res.j && res.j.msg) || 'No se pudo. Probá de nuevo en un rato.', 'err');
+      btn.disabled = false;
+    })
+    .catch(function () {
+      decir('No se pudo conectar. Revisá tu conexión y probá de nuevo.', 'err');
+      btn.disabled = false;
+    });
+  });
+})();
+</script>
 
 <script>
 // ============================================================================

@@ -26,4 +26,13 @@
     <priority>0.8</priority>
   </url>
 
+  <!-- Términos de uso y política de privacidad.
+       baja.html NO va acá a propósito: es noindex. -->
+  <url>
+    <loc>https://rioprofundo.com/terminos.html</loc>
+    <lastmod>2026-07-20</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
 </urlset>
