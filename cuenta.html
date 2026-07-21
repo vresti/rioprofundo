@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mi cuenta · Río Profundo</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#06141f">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+<style>
+  @font-face {
+    font-family: 'Fraunces'; font-style: normal; font-weight: 400 900; font-display: swap;
+    src: url('fonts/fraunces-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: 'Spline Sans Mono'; font-style: normal; font-weight: 400 600; font-display: swap;
+    src: url('fonts/spline-mono-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  :root {
+    --abismo:#06141f; --agua:#0a2540; --cian:#5fd4e6;
+    --espuma:#eaf6f8; --niebla:#8fb2c4; --rojo:#e8556b; --verde:#4fd1a5; --ambar:#f0b429;
+    --linea:rgba(143,178,196,.18); --vidrio:rgba(14,51,84,.55);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:'Spline Sans Mono',monospace;
+    background:radial-gradient(ellipse 120% 80% at 50% -10%, var(--agua) 0%, var(--abismo) 70%), var(--abismo);
+    background-attachment:fixed; color:var(--espuma); min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    padding:clamp(14px,3vw,32px); -webkit-font-smoothing:antialiased;
+  }
+  .caja {
+    width:100%; max-width:32rem;
+    background:var(--vidrio); border:1px solid var(--linea); border-radius:16px;
+    padding:clamp(22px,5vw,32px) clamp(18px,4vw,28px);
+  }
+  h1 {
+    font-family:'Fraunces',serif; font-weight:700;
+    font-size:clamp(1.4rem,4vw,1.8rem); line-height:1.2; margin-bottom:6px;
+  }
+  .sub { font-size:.82rem; color:var(--niebla); margin-bottom:22px; line-height:1.6; }
+  p { font-size:.88rem; line-height:1.7; color:var(--niebla); }
+  a { color:var(--cian); }
+  label { display:block; font-size:.78rem; color:var(--niebla); margin-bottom:6px; }
+  input {
+    width:100%; font-family:inherit; font-size:1rem; color:var(--espuma);
+    background:rgba(6,20,31,.6); border:1px solid var(--linea); border-radius:10px;
+    padding:12px 14px; margin-bottom:14px;
+  }
+  input:focus { outline:none; border-color:var(--cian); }
+  #codigo { text-align:center; letter-spacing:.5em; text-transform:uppercase; font-size:1.5rem; padding-left:.5em; }
+  button {
+    width:100%; font-family:inherit; font-size:.92rem; font-weight:600; cursor:pointer;
+    color:var(--abismo); background:var(--cian); border:0; border-radius:10px; padding:13px;
+  }
+  button:disabled { opacity:.5; cursor:default; }
+  .aviso { font-size:.8rem; line-height:1.6; margin-top:14px; padding:11px 13px; border-radius:9px; }
+  .aviso.mal  { color:var(--rojo);  background:rgba(232,85,107,.1);  border:1px solid rgba(232,85,107,.25); }
+  .aviso.bien { color:var(--verde); background:rgba(79,209,165,.1);  border:1px solid rgba(79,209,165,.25); }
+  .oculto { display:none; }
+
+  .fila {
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    padding:13px 0; border-bottom:1px solid var(--linea);
+  }
+  .fila:last-of-type { border-bottom:0; }
+  .fila .k { font-size:.78rem; color:var(--niebla); }
+  .fila .v { font-size:.92rem; text-align:right; }
+  .on  { color:var(--verde); }
+  .off { color:var(--niebla); }
+  .warn{ color:var(--ambar); }
+  .pie { margin-top:22px; padding-top:16px; border-top:1px solid var(--linea);
+         font-size:.76rem; color:var(--niebla); line-height:1.7; }
+  .link { background:none; border:0; color:var(--cian); font-family:inherit; font-size:.76rem;
+          cursor:pointer; padding:0; width:auto; text-decoration:underline; }
+</style>
+</head>
+<body>
+
+<!-- ÁREA DE CLIENTES (21/07/2026)
+
+     Login SIN CONTRASEÑA: mail -> código -> sesión de 90 días. La contraseña es
+     lo que genera la fricción de verdad (elegirla, olvidarla, el reset, el mail
+     que no llega); sacándola, el "2FA" deja de ser un segundo factor y pasa a ser
+     el único, más simple que lo que reemplaza. Y con sesión larga, la mayoría de
+     las visitas no ven login.
+
+     Los datos NO salen de GAS: el Worker los lee de un espejo en KV que un
+     trigger mantiene al día. Por eso esto abre en milisegundos y sigue andando
+     aunque GAS esté caído. Ver ../CLAUDE.md (sesión 21/07).
+
+     ⚠️ Los fetch mandan Content-Type: text/plain A PROPÓSITO. Así el pedido es
+     "simple" para CORS y el navegador NO dispara el preflight OPTIONS. Mismo
+     truco que el formulario de alta de index.html. -->
+
+<div class="caja">
+
+  <!-- ---------- PASO 1: mail ---------- -->
+  <div id="p1">
+    <h1>Mi cuenta</h1>
+    <p class="sub">Poné el mail con el que te registrás en Río Profundo y te mandamos un código para entrar. No hace falta contraseña.</p>
+    <form id="fMail">
+      <label for="email">Tu mail</label>
+      <input id="email" type="email" autocomplete="email" required placeholder="vos@ejemplo.com">
+      <button type="submit" id="bMail">Mandame el código</button>
+    </form>
+    <div id="aviso1" class="aviso oculto"></div>
+  </div>
+
+  <!-- ---------- PASO 2: código ---------- -->
+  <div id="p2" class="oculto">
+    <h1>Tu código</h1>
+    <p class="sub" id="dondeFue">Si ese mail está registrado, te llegó un código.</p>
+    <form id="fCodigo">
+      <label for="codigo">Código de 4 caracteres</label>
+      <input id="codigo" maxlength="4" autocomplete="one-time-code" required placeholder="A503">
+      <button type="submit" id="bCodigo">Entrar</button>
+    </form>
+    <div id="aviso2" class="aviso oculto"></div>
+    <div class="pie"><button class="link" id="volver">Usar otro mail</button></div>
+  </div>
+
+  <!-- ---------- PASO 3: la cuenta ---------- -->
+  <div id="p3" class="oculto">
+    <h1 id="hola">Tu cuenta</h1>
+    <p class="sub">Esto es lo que tenemos registrado.</p>
+    <div id="datos"></div>
+    <div class="pie">
+      <p id="notaWa"></p>
+      <br>
+      <button class="link" id="salir">Cerrar sesión</button> ·
+      <a href="/">Volver a Río Profundo</a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var API = 'https://restless-smoke-596c.vresti.workers.dev';
+  var LLAVE = 'rp_sesion';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var mail = '';
+
+  function ver(paso) {
+    ['p1','p2','p3'].forEach(function (p) { $(p).classList.toggle('oculto', p !== paso); });
+  }
+  function aviso(id, clase, texto) {
+    var e = $(id); e.className = 'aviso ' + clase; e.textContent = texto;
+  }
+  function limpiar(id) { $(id).className = 'aviso oculto'; }
+
+  // POST "simple": text/plain evita el preflight OPTIONS.
+  function post(ruta, datos) {
+    return fetch(API + ruta, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(datos)
+    }).then(function (r) { return r.json(); });
+  }
+
+  // ---------- paso 1: pedir el código ----------
+  $('fMail').addEventListener('submit', function (e) {
+    e.preventDefault();
+    limpiar('aviso1');
+    mail = $('email').value.trim().toLowerCase();
+    $('bMail').disabled = true; $('bMail').textContent = 'Mandando…';
+
+    post('/entrar', { email: mail })
+      .then(function (j) {
+        $('bMail').disabled = false; $('bMail').textContent = 'Mandame el código';
+        // Responde lo mismo exista o no el mail: es a propósito, para que el
+        // formulario no sirva para averiguar quién está suscripto.
+        if (j && j.ok) { ver('p2'); $('codigo').focus(); }
+        else { aviso('aviso1', 'mal', (j && j.msg) || 'No se pudo. Probá de nuevo.'); }
+      })
+      .catch(function () {
+        $('bMail').disabled = false; $('bMail').textContent = 'Mandame el código';
+        aviso('aviso1', 'mal', 'No se pudo conectar. Revisá tu conexión.');
+      });
+  });
+
+  // ---------- paso 2: canjear el código ----------
+  $('fCodigo').addEventListener('submit', function (e) {
+    e.preventDefault();
+    limpiar('aviso2');
+    var cod = $('codigo').value.trim().toUpperCase();
+    $('bCodigo').disabled = true; $('bCodigo').textContent = 'Entrando…';
+
+    post('/sesion', { email: mail, codigo: cod })
+      .then(function (j) {
+        $('bCodigo').disabled = false; $('bCodigo').textContent = 'Entrar';
+        if (j && j.ok && j.token) {
+          try { localStorage.setItem(LLAVE, j.token); } catch (err) { /* modo privado */ }
+          cargar(j.token);
+        } else {
+          aviso('aviso2', 'mal', (j && j.msg) || 'Código incorrecto o vencido.');
+          $('codigo').value = ''; $('codigo').focus();
+        }
+      })
+      .catch(function () {
+        $('bCodigo').disabled = false; $('bCodigo').textContent = 'Entrar';
+        aviso('aviso2', 'mal', 'No se pudo conectar.');
+      });
+  });
+
+  $('volver').addEventListener('click', function () { limpiar('aviso2'); ver('p1'); });
+
+  $('salir').addEventListener('click', function () {
+    try { localStorage.removeItem(LLAVE); } catch (e) {}
+    $('email').value = ''; $('codigo').value = '';
+    ver('p1');
+  });
+
+  // ---------- paso 3: mostrar la cuenta ----------
+  function fila(k, v, clase) {
+    return '<div class="fila"><span class="k">' + k + '</span>'
+         + '<span class="v ' + (clase || '') + '">' + v + '</span></div>';
+  }
+
+  function pintar(c) {
+    $('hola').textContent = c.nombre ? ('Hola, ' + c.nombre) : 'Tu cuenta';
+
+    var h = '';
+    h += fila('Avisos por mail', c.mail ? 'Activos' : 'Pausados', c.mail ? 'on' : 'off');
+    h += fila('Avisos por WhatsApp', c.ws ? 'Activos' : 'No activados', c.ws ? 'on' : 'off');
+    if (c.tel && c.tel !== '***') h += fila('Teléfono', c.tel);
+
+    if (c.ws && c.dias !== null && c.dias !== undefined) {
+      // El vencimiento es INVISIBLE (no hay pantalla de error: simplemente dejan
+      // de llegar mensajes). Por eso acá se muestra siempre y bien grande.
+      var txt = c.dias > 0 ? ('Te quedan ' + c.dias + ' día' + (c.dias === 1 ? '' : 's'))
+              : c.dias === 0 ? 'Vence hoy' : 'Vencido';
+      h += fila('Vencimiento', txt + (c.vence ? ' · ' + c.vence : ''),
+                c.dias > 30 ? 'on' : (c.dias >= 0 ? 'warn' : 'off'));
+    }
+    $('datos').innerHTML = h;
+
+    $('notaWa').innerHTML = c.ws
+      ? 'Los avisos por WhatsApp son <b>mejor esfuerzo</b>; los de mail son la base y no se interrumpen.'
+      : 'Hoy recibís los avisos por mail, que son gratis y siempre lo van a ser. '
+        + 'Los avisos por WhatsApp te llegan al teléfono, apenas pasa. '
+        + 'Escribinos a <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a> si los querés.';
+
+    ver('p3');
+  }
+
+  function cargar(token) {
+    post('/cuenta', { token: token })
+      .then(function (j) {
+        if (j && j.ok && j.cuenta) { pintar(j.cuenta); }
+        else {
+          // Sesión vencida o espejo sin datos: se vuelve al login sin drama.
+          try { localStorage.removeItem(LLAVE); } catch (e) {}
+          ver('p1');
+          if (j && j.msg === 'Sin datos') {
+            aviso('aviso1', 'mal', 'No encontramos datos de esa cuenta. Escribinos a info@rioprofundo.com.');
+          }
+        }
+      })
+      .catch(function () { ver('p1'); aviso('aviso1', 'mal', 'No se pudo conectar.'); });
+  }
+
+  // ---------- arranque: si hay sesión, no se ve el login ----------
+  var guardado = null;
+  try { guardado = localStorage.getItem(LLAVE); } catch (e) {}
+  if (guardado) { cargar(guardado); } else { ver('p1'); }
+})();
+</script>
+</body>
+</html>
