@@ -149,6 +149,17 @@
     -webkit-text-fill-color: transparent;
   }
   .marca .punto { color: var(--cian); -webkit-text-fill-color: var(--cian); }
+  /* Acceso al área de clientes. Discreto a propósito: la home es el instrumento,
+     no un embudo de venta. Quien busca su cuenta lo encuentra; al resto no le
+     estorba. `margin-left:auto` lo manda a la derecha y en mobile baja solo. */
+  .micuenta {
+    margin-left: auto; align-self: center;
+    font-size: clamp(.7rem, 1.8vw, .8rem);
+    color: var(--cian); text-decoration: none; white-space: nowrap;
+    border: 1px solid var(--linea); border-radius: 999px;
+    padding: 7px 15px;
+  }
+  .micuenta:hover { border-color: var(--cian); }
   .subtitulo {
     color: var(--niebla);
     font-size: clamp(.72rem, 2vw, .9rem);
@@ -385,6 +396,7 @@
   <header>
     <div class="marca">
       <h1>Río Profundo<span class="punto">.</span></h1>
+      <a class="micuenta" href="/cuenta.html">Mi cuenta</a>
     </div>
     <div class="subtitulo">Marea y nivel del R. de la Plata · S. Fernando</div>
   </header>
