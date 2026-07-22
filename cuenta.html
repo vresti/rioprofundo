@@ -76,6 +76,23 @@
          font-size:.76rem; color:var(--niebla); line-height:1.7; }
   .link { background:none; border:0; color:var(--cian); font-family:inherit; font-size:.76rem;
           cursor:pointer; padding:0; width:auto; text-decoration:underline; }
+
+  /* --- activación de WhatsApp (22/07/2026) --- */
+  .zona { margin-top:20px; padding:16px 15px; border:1px solid var(--linea);
+          border-radius:12px; background:rgba(6,20,31,.35); }
+  .zona h2 { font-family:'Fraunces',serif; font-weight:700; font-size:1.05rem; margin-bottom:8px; }
+  .zona p { font-size:.8rem; margin-bottom:10px; }
+  .zona p:last-child { margin-bottom:0; }
+  .monto { font-family:'Fraunces',serif; font-weight:800; font-size:clamp(1.8rem,7vw,2.4rem);
+           color:var(--espuma); text-align:center; margin:10px 0 2px; }
+  .monto-nota { text-align:center; font-size:.74rem; color:var(--ambar); margin-bottom:14px; }
+  .dato { display:flex; justify-content:space-between; align-items:baseline; gap:10px;
+          padding:9px 0; border-bottom:1px dashed var(--linea); font-size:.86rem; }
+  .dato:last-of-type { border-bottom:0; }
+  .dato .k { font-size:.74rem; color:var(--niebla); flex:none; }
+  .dato .v { text-align:right; word-break:break-all; user-select:all; -webkit-user-select:all; }
+  .latido { display:inline-block; animation:latido 1.6s ease-in-out infinite; }
+  @keyframes latido { 0%,100%{opacity:.35} 50%{opacity:1} }
 </style>
 </head>
 <body>
@@ -91,6 +108,19 @@
      Los datos NO salen de GAS: el Worker los lee de un espejo en KV que un
      trigger mantiene al día. Por eso esto abre en milisegundos y sigue andando
      aunque GAS esté caído. Ver ../CLAUDE.md (sesión 21/07).
+
+     ACTIVACIÓN DE WHATSAPP (22/07/2026): manejada por ESTADOS que vienen del
+     espejo (campo `estado` = estado_ws de Contactos):
+       ''            -> botón "Activar" -> formulario (nombre+domicilio, consumidor
+                        final, V1) -> POST /activar -> espera
+       'verificando' -> espera: código A503 mandado, la página consulta /cuenta
+                        cada 15 s hasta que la respuesta por WhatsApp lo verifique
+       'verificado'  -> pantalla de pago: IMPORTE EXACTO (centavos = últimos 2
+                        dígitos del celular) + alias. Sin botón "ya transferí":
+                        Victor detecta la acreditación en el mail del banco.
+       ws:true       -> activo, con vencimiento (como siempre)
+     Ser estado-driven la hace resistente a recargas: la persona puede cerrar y
+     volver en cualquier punto y la página la ubica donde estaba.
 
      ⚠️ Los fetch mandan Content-Type: text/plain A PROPÓSITO. Así el pedido es
      "simple" para CORS y el navegador NO dispara el preflight OPTIONS. Mismo
@@ -128,6 +158,49 @@
     <h1 id="hola">Tu cuenta</h1>
     <p class="sub">Esto es lo que tenemos registrado.</p>
     <div id="datos"></div>
+
+    <!-- activación: botón -->
+    <div id="actBoton" class="zona oculto">
+      <h2>Avisos por WhatsApp</h2>
+      <p>Te llegan al teléfono apenas el río se sale de lo normal — crecientes y bajantes fuertes, al instante.</p>
+      <p id="actPrecio"></p>
+      <button id="bActivar" type="button">Activar los avisos por WhatsApp</button>
+    </div>
+
+    <!-- activación: datos fiscales (consumidor final, V1) -->
+    <div id="actForm" class="zona oculto">
+      <h2>Tus datos para la factura</h2>
+      <p>Emitimos factura B a consumidor final. Solo esto:</p>
+      <form id="fActivar">
+        <label for="acNombre">Nombre y apellido</label>
+        <input id="acNombre" maxlength="80" autocomplete="name" required placeholder="Como va en la factura">
+        <label for="acDomicilio">Domicilio completo</label>
+        <input id="acDomicilio" maxlength="160" autocomplete="street-address" required placeholder="Calle, número y localidad">
+        <button type="submit" id="bContinuar">Continuar</button>
+      </form>
+      <div id="avisoAct" class="aviso oculto"></div>
+      <div class="pie" style="margin-top:14px;padding-top:12px"><button class="link" id="actCancelar">Cancelar</button></div>
+    </div>
+
+    <!-- activación: esperando la respuesta por WhatsApp -->
+    <div id="actEspera" class="zona oculto">
+      <h2>Mirá tu WhatsApp 📱</h2>
+      <p id="esperaTexto">Te mandamos un código por WhatsApp.</p>
+      <p><b style="color:var(--espuma)">Respondé ese mensaje con el código</b>, por WhatsApp mismo. Y de paso guardá el número como <b style="color:var(--espuma)">Río Profundo</b>: así los avisos no se te pierden entre desconocidos.</p>
+      <p class="latido">Esperando tu respuesta…</p>
+      <p id="esperaLento" class="oculto">¿No te llegó nada? Revisá que tu número esté bien y <button class="link" id="reintentar">pedí otro código</button>.</p>
+    </div>
+
+    <!-- activación: verificado, a transferir -->
+    <div id="actPago" class="zona oculto">
+      <h2>✅ Número verificado. Último paso: la transferencia</h2>
+      <div id="pagoMonto" class="monto"></div>
+      <div class="monto-nota">Transferí ese importe EXACTO, con los centavos</div>
+      <div id="pagoDatos"></div>
+      <p style="margin-top:12px">Los centavos identifican tu pago, así que puede transferir cualquiera — no hace falta que la cuenta esté a tu nombre.</p>
+      <p>Cuando se acredite, activamos tus avisos y te mandamos la factura por mail. En general, dentro del día.</p>
+    </div>
+
     <div class="pie">
       <p id="notaWa"></p>
       <br>
@@ -142,9 +215,15 @@
 (function () {
   var API = 'https://restless-smoke-596c.vresti.workers.dev';
   var LLAVE = 'rp_sesion';
+  var POLL_MS = 15000;      // cada cuánto se consulta /cuenta durante la espera
+  var POLL_MAX = 80;        // ~20 min y se deja de insistir (el código vence a los 15)
 
   var $ = function (id) { return document.getElementById(id); };
   var mail = '';
+  var token = null;
+  var vista = null;         // null = decidir por estado; 'form' | 'espera' fijadas por el usuario
+  var pollTimer = null;
+  var pollN = 0;
 
   function ver(paso) {
     ['p1','p2','p3'].forEach(function (p) { $(p).classList.toggle('oculto', p !== paso); });
@@ -153,6 +232,15 @@
     var e = $(id); e.className = 'aviso ' + clase; e.textContent = texto;
   }
   function limpiar(id) { $(id).className = 'aviso oculto'; }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c];
+    });
+  }
+  function pesos(n) {
+    try { return '$ ' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    catch (e) { return '$ ' + n; }
+  }
 
   // POST "simple": text/plain evita el preflight OPTIONS.
   function post(ruta, datos) {
@@ -212,6 +300,7 @@
 
   $('salir').addEventListener('click', function () {
     try { localStorage.removeItem(LLAVE); } catch (e) {}
+    pararPoll();
     $('email').value = ''; $('codigo').value = '';
     ver('p1');
   });
@@ -222,13 +311,13 @@
          + '<span class="v ' + (clase || '') + '">' + v + '</span></div>';
   }
 
-  function pintar(c) {
+  function pintar(c, pago) {
     $('hola').textContent = c.nombre ? ('Hola, ' + c.nombre) : 'Tu cuenta';
 
     var h = '';
     h += fila('Avisos por mail', c.mail ? 'Activos' : 'Pausados', c.mail ? 'on' : 'off');
     h += fila('Avisos por WhatsApp', c.ws ? 'Activos' : 'No activados', c.ws ? 'on' : 'off');
-    if (c.tel && c.tel !== '***') h += fila('Teléfono', c.tel);
+    if (c.tel && c.tel !== '***') h += fila('Teléfono', esc(c.tel));
 
     if (c.ws && c.dias !== null && c.dias !== undefined) {
       // El vencimiento es INVISIBLE (no hay pantalla de error: simplemente dejan
@@ -240,19 +329,147 @@
     }
     $('datos').innerHTML = h;
 
+    pintarActivacion(c, pago);
+
     $('notaWa').innerHTML = c.ws
       ? 'Los avisos por WhatsApp son <b>mejor esfuerzo</b>; los de mail son la base y no se interrumpen.'
-      : 'Hoy recibís los avisos por mail, que son gratis y siempre lo van a ser. '
-        + 'Los avisos por WhatsApp te llegan al teléfono, apenas pasa. '
-        + 'Escribinos a <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a> si los querés.';
+      : 'Los avisos por mail son gratis y siempre lo van a ser. '
+        + '¿Dudas? Escribinos a <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>.';
 
     ver('p3');
   }
 
-  function cargar(token) {
-    post('/cuenta', { token: token })
+  // ---------- la activación de WhatsApp (22/07/2026) ----------
+  // Cuatro cajas, una visible por vez. Manda el ESTADO del espejo; `vista` sólo
+  // lo pisa mientras la persona está en el formulario o recién mandó el pedido
+  // (el espejo tarda ~1-2 min en enterarse).
+  function pintarActivacion(c, pago) {
+    var cajas = ['actBoton', 'actForm', 'actEspera', 'actPago'];
+    var mostrar = '';
+
+    if (!c.ws && c.tel && c.tel !== '***') {
+      var estado = String(c.estado || '');
+      if (vista === 'form') mostrar = 'actForm';
+      else if (vista === 'espera' || estado === 'verificando') mostrar = 'actEspera';
+      else if (estado === 'verificado') mostrar = 'actPago';
+      else mostrar = 'actBoton';
+    }
+
+    cajas.forEach(function (id) { $(id).classList.toggle('oculto', id !== mostrar); });
+
+    if (mostrar === 'actBoton') {
+      $('actPrecio').innerHTML = (pago && pago.precio)
+        ? 'Cuesta <b style="color:var(--espuma)">' + pesos(pago.precio) + ' por año</b>, pago único por transferencia. IVA incluido, factura B.'
+        : 'Pago único anual por transferencia.';
+    }
+
+    if (mostrar === 'actEspera') { empezarPoll(); } else if (mostrar !== 'actForm') { pararPoll(); }
+
+    if (mostrar === 'actPago') {
+      if (pago && pago.importe) {
+        $('pagoMonto').textContent = pesos(pago.importe);
+        var d = '';
+        if (pago.alias) d += '<div class="dato"><span class="k">Alias</span><span class="v">' + esc(pago.alias) + '</span></div>';
+        if (pago.cbu) d += '<div class="dato"><span class="k">CBU</span><span class="v">' + esc(pago.cbu) + '</span></div>';
+        if (pago.titular) d += '<div class="dato"><span class="k">Titular</span><span class="v">' + esc(pago.titular) + '</span></div>';
+        $('pagoDatos').innerHTML = d;
+      } else {
+        // cfg:pago sin cargar todavía: mejor decirlo que mostrar una caja vacía.
+        $('pagoMonto').textContent = '';
+        $('pagoDatos').innerHTML = '<p>No pudimos traer los datos de pago. Recargá en un rato o escribinos a <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>.</p>';
+      }
+    }
+  }
+
+  $('bActivar').addEventListener('click', function () {
+    vista = 'form';
+    limpiar('avisoAct');
+    if (!$('acNombre').value) {
+      var hola = $('hola').textContent;
+      if (hola.indexOf('Hola, ') === 0) $('acNombre').value = hola.slice(6);
+    }
+    refrescarVista();
+    $('acNombre').focus();
+  });
+
+  $('actCancelar').addEventListener('click', function () {
+    vista = null; limpiar('avisoAct'); refrescarVista();
+  });
+
+  $('fActivar').addEventListener('submit', function (e) {
+    e.preventDefault();
+    limpiar('avisoAct');
+    $('bContinuar').disabled = true; $('bContinuar').textContent = 'Mandando…';
+
+    post('/activar', {
+      token: token,
+      nombre: $('acNombre').value.trim(),
+      domicilio: $('acDomicilio').value.trim()
+    })
       .then(function (j) {
-        if (j && j.ok && j.cuenta) { pintar(j.cuenta); }
+        $('bContinuar').disabled = false; $('bContinuar').textContent = 'Continuar';
+        if (j && (j.ok || j.esperar)) {
+          if (j.tel) $('esperaTexto').textContent = 'Te mandamos un código por WhatsApp al ' + j.tel + '.';
+          vista = 'espera';
+          pollN = 0;
+          refrescarVista();
+        } else {
+          aviso('avisoAct', 'mal', (j && j.msg) || 'No se pudo. Probá de nuevo.');
+        }
+      })
+      .catch(function () {
+        $('bContinuar').disabled = false; $('bContinuar').textContent = 'Continuar';
+        aviso('avisoAct', 'mal', 'No se pudo conectar.');
+      });
+  });
+
+  // "Pedí otro código": vuelve al formulario. La INICIATIVA es siempre de la
+  // persona — nosotros nunca re-mandamos solos (y el Worker frena a 1/min).
+  $('reintentar').addEventListener('click', function () {
+    vista = 'form'; limpiar('avisoAct'); refrescarVista();
+  });
+
+  var ultima = { c: null, pago: null };
+  function refrescarVista() { if (ultima.c) pintarActivacion(ultima.c, ultima.pago); }
+
+  // Consulta /cuenta cada 15 s mientras se espera la respuesta por WhatsApp.
+  // El circuito real tarda ~2-3 min (respuesta -> drenaje del minuto -> espejo),
+  // así que 15 s sobra y son lecturas de KV, que es lo barato (100k/día).
+  function empezarPoll() {
+    if (pollTimer) return;
+    pollTimer = setInterval(function () {
+      pollN++;
+      if (pollN > POLL_MAX) {
+        pararPoll();
+        $('esperaLento').classList.remove('oculto');
+        return;
+      }
+      if (pollN >= 8) $('esperaLento').classList.remove('oculto');  // a los ~2 min ofrece reintentar
+      post('/cuenta', { token: token })
+        .then(function (j) {
+          if (!(j && j.ok && j.cuenta)) return;                     // hipo transitorio: se reintenta solo
+          ultima = { c: j.cuenta, pago: j.pago || null };
+          var estado = String(j.cuenta.estado || '');
+          if (j.cuenta.ws || estado === 'verificado') {
+            vista = null; pararPoll(); pintar(j.cuenta, j.pago || null);
+          }
+        })
+        .catch(function () { /* siguiente vuelta */ });
+    }, POLL_MS);
+  }
+  function pararPoll() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    $('esperaLento').classList.add('oculto');
+  }
+
+  function cargar(t) {
+    token = t;
+    post('/cuenta', { token: t })
+      .then(function (j) {
+        if (j && j.ok && j.cuenta) {
+          ultima = { c: j.cuenta, pago: j.pago || null };
+          pintar(j.cuenta, j.pago || null);
+        }
         else {
           // Sesión vencida o espejo sin datos: se vuelve al login sin drama.
           try { localStorage.removeItem(LLAVE); } catch (e) {}
