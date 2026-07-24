@@ -46,6 +46,22 @@
   a { color:var(--cian); }
   .bien h1 { color:var(--verde); }
   .mal h1 { color:var(--rojo); }
+  /* CTA de WhatsApp: la confirmación es el momento de más intención. Botón verde
+     WhatsApp para que enganche; el precio se ve claro en Mi cuenta (sin dark pattern). */
+  .cta { margin-top:24px; padding-top:22px; border-top:1px solid var(--linea); }
+  .cta .q { font-size:.92rem; line-height:1.6; color:var(--espuma); margin-bottom:16px; }
+  .btn-ws {
+    display:inline-flex; align-items:center; gap:9px;
+    background:#25d366; color:#04231a; text-decoration:none;
+    font-family:'Fraunces',serif; font-weight:700; font-size:1.02rem;
+    padding:14px 26px; border-radius:13px;
+    box-shadow:0 8px 24px rgba(37,211,102,.28);
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .btn-ws:hover { transform:translateY(-1px); box-shadow:0 10px 30px rgba(37,211,102,.38); }
+  .btn-ws svg { width:22px; height:22px; fill:#04231a; }
+  .cta .note { font-size:.74rem; line-height:1.5; color:var(--niebla); margin-top:14px; }
+  .sec { display:inline-block; margin-top:22px; font-size:.85rem; color:var(--niebla); }
 </style>
 </head>
 <body>
@@ -84,8 +100,18 @@
     .then(function (r) { return r.json(); })
     .then(function (j) {
       if (j && j.ok) {
-        pinta('bien', 'Suscripción confirmada',
-          'Vas a recibir los avisos <b>por mail, gratis</b> — cuando el río se salga de lo normal en San Fernando y el Delta. Crecientes y bajantes fuertes, nada más que eso.<br><br>¿Los querés también por WhatsApp? Es un servicio aparte (pago): activalo desde <a href="/cuenta.html">Mi cuenta</a>.');
+        caja.className = 'caja bien';
+        t.textContent = 'Suscripción confirmada';
+        p.innerHTML = 'Vas a recibir los avisos <b>por mail, gratis</b> — cuando el río se salga de lo normal en San Fernando y el Delta. Crecientes y bajantes fuertes, nada más que eso.';
+        var wa = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.05 4.91A9.816 9.816 0 0 0 12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21h.004c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01zM12.04 20.15h-.004c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.264 8.264 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.82 2.42a8.183 8.183 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.42-.56-.43-.14-.01-.31-.01-.48-.01-.17 0-.43.06-.66.31-.23.25-.87.85-.87 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.17-.47-.29z"/></svg>';
+        var cta = document.createElement('div');
+        cta.className = 'cta';
+        cta.innerHTML =
+            '<p class="q">¿Querés que además te avisemos por <b>WhatsApp</b>? Te llega al toque, sin abrir el mail.</p>'
+          + '<a class="btn-ws" href="/cuenta.html">' + wa + 'Quiero los avisos por WhatsApp</a>'
+          + '<p class="note">Servicio aparte · pago único anual · lo activás desde Mi cuenta</p>'
+          + '<a class="sec" href="/">Ir a Río Profundo</a>';
+        caja.appendChild(cta);
       } else {
         pinta('mal', 'No se pudo confirmar', 'Ese link no es válido o ya venció. Probá suscribirte de nuevo.');
       }
