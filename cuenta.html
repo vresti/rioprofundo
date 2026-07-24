@@ -93,6 +93,21 @@
   .dato .v { text-align:right; word-break:break-all; user-select:all; -webkit-user-select:all; }
   .latido { display:inline-block; animation:latido 1.6s ease-in-out infinite; }
   @keyframes latido { 0%,100%{opacity:.35} 50%{opacity:1} }
+
+  /* --- el botón wa.me (23/07/2026): el mensaje lo manda la persona, no nosotros --- */
+  .wabtn {
+    display:flex; align-items:center; justify-content:center; gap:9px;
+    width:100%; padding:14px; border-radius:10px; text-decoration:none;
+    background:#25d366; color:#06231a; font-weight:600; font-size:.94rem;
+  }
+  .wabtn:hover { filter:brightness(1.06); }
+  .wamanual { font-size:.76rem; margin-top:12px; }
+  .wamanual b { color:var(--espuma); user-select:all; -webkit-user-select:all; }
+  .wacod {
+    display:inline-block; letter-spacing:.22em; font-weight:600;
+    color:var(--espuma); background:rgba(6,20,31,.6);
+    border:1px solid var(--linea); border-radius:7px; padding:2px 9px;
+  }
 </style>
 </head>
 <body>
@@ -113,8 +128,12 @@
      espejo (campo `estado` = estado_ws de Contactos):
        ''            -> botón "Activar" -> formulario (nombre+domicilio, consumidor
                         final, V1) -> POST /activar -> espera
-       'verificando' -> espera: código A503 mandado, la página consulta /cuenta
-                        cada 15 s hasta que la respuesta por WhatsApp lo verifique
+       'verificando' -> botón wa.me: la persona NOS manda el código (23/07/2026;
+                        antes se lo mandábamos nosotros). La página consulta
+                        /cuenta cada 15 s hasta que su mensaje lo verifique.
+       'otro_numero' -> nos escribió desde un teléfono que YA está activo en otra
+                        cuenta: es el único caso que no se arregla solo (si el
+                        número está libre, GAS lo adopta y verifica igual)
        'verificado'  -> pantalla de pago: IMPORTE EXACTO (centavos = últimos 2
                         dígitos del celular) + alias. Sin botón "ya transferí":
                         Victor detecta la acreditación en el mail del banco.
@@ -182,13 +201,32 @@
       <div class="pie" style="margin-top:14px;padding-top:12px"><button class="link" id="actCancelar">Cancelar</button></div>
     </div>
 
-    <!-- activación: esperando la respuesta por WhatsApp -->
+    <!-- activación: la persona nos escribe por WhatsApp (23/07/2026)
+         ⚠️ Acá NOSOTROS NO MANDAMOS NADA. El botón abre su WhatsApp con el
+         mensaje ya escrito y el que aprieta enviar es ella. Ver la cabecera de
+         ../alerta_sudestada/Verificacion.gs: invertir la dirección del primer
+         mensaje es lo que saca al número del perfil que Meta bloquea. -->
     <div id="actEspera" class="zona oculto">
-      <h2>Mirá tu WhatsApp 📱</h2>
-      <p id="esperaTexto">Te mandamos un código por WhatsApp.</p>
-      <p><b style="color:var(--espuma)">Respondé ese mensaje con el código</b>, por WhatsApp mismo. Y de paso guardá el número como <b style="color:var(--espuma)">Río Profundo</b>: así los avisos no se te pierden entre desconocidos.</p>
-      <p class="latido">Esperando tu respuesta…</p>
-      <p id="esperaLento" class="oculto">¿No te llegó nada? Revisá que tu número esté bien y <button class="link" id="reintentar">pedí otro código</button>.</p>
+      <h2>Último paso: escribinos por WhatsApp 📱</h2>
+
+      <!-- si el código llegó desde otro número, esto explica el silencio -->
+      <div id="waOtro" class="aviso mal oculto"></div>
+
+      <p>Para confirmar que el teléfono es tuyo, el mensaje lo mandás vos. Es un toque:</p>
+
+      <div id="waListo" class="oculto">
+        <a id="waBoton" class="wabtn" href="#" target="_blank" rel="noopener">
+          Abrir WhatsApp y enviar ►
+        </a>
+        <p class="wamanual" id="waManual"></p>
+        <p style="margin-top:12px">Cuando se abra el chat, <b style="color:var(--espuma)">guardá el número como Río Profundo</b>: así los avisos de crecida no se te pierden entre desconocidos.</p>
+      </div>
+
+      <!-- el código viaja por el espejo: hasta ~1 min desde que apretó Continuar -->
+      <div id="waPreparando"><p class="latido">Preparando tu enlace…</p></div>
+
+      <p class="latido" id="waEsperando">Esperando tu mensaje…</p>
+      <p id="esperaLento" class="oculto">¿Se trabó? <button class="link" id="reintentar">Pedí otro código</button>.</p>
     </div>
 
     <!-- activación: verificado, a transferir -->
@@ -216,7 +254,7 @@
   var API = 'https://restless-smoke-596c.vresti.workers.dev';
   var LLAVE = 'rp_sesion';
   var POLL_MS = 15000;      // cada cuánto se consulta /cuenta durante la espera
-  var POLL_MAX = 80;        // ~20 min y se deja de insistir (el código vence a los 15)
+  var POLL_MAX = 80;        // ~20 min y se deja de insistir (el código vence a los 30)
 
   var $ = function (id) { return document.getElementById(id); };
   var mail = '';
@@ -350,7 +388,7 @@
     if (!c.ws && c.tel && c.tel !== '***') {
       var estado = String(c.estado || '');
       if (vista === 'form') mostrar = 'actForm';
-      else if (vista === 'espera' || estado === 'verificando') mostrar = 'actEspera';
+      else if (vista === 'espera' || estado === 'verificando' || estado === 'otro_numero') mostrar = 'actEspera';
       else if (estado === 'verificado') mostrar = 'actPago';
       else mostrar = 'actBoton';
     }
@@ -363,7 +401,8 @@
         : 'Pago único anual por transferencia.';
     }
 
-    if (mostrar === 'actEspera') { empezarPoll(); } else if (mostrar !== 'actForm') { pararPoll(); }
+    if (mostrar === 'actEspera') { pintarWa(c); empezarPoll(); }
+    else if (mostrar !== 'actForm') { pararPoll(); }
 
     if (mostrar === 'actPago') {
       if (pago && pago.importe) {
@@ -379,6 +418,59 @@
         $('pagoDatos').innerHTML = '<p>No pudimos traer los datos de pago. Recargá en un rato o escribinos a <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>.</p>';
       }
     }
+  }
+
+  /**
+   * EL BOTÓN wa.me (23/07/2026).
+   *
+   * `c.wa` es el link entero — lo arma GAS (`verLinkWaMe_`) con el número de la
+   * hoja Config y el código adentro — y `c.wa_cod` el código suelto, para el que
+   * está en la computadora sin WhatsApp Web y tiene que escribirnos del celular.
+   *
+   * Mientras el espejo no publicó (hasta ~1 min desde que apretó Continuar) no
+   * hay link: se muestra "preparando" en vez de un botón que no lleva a ningún
+   * lado. Y si el código llegó desde OTRO número, el aviso de arriba explica el
+   * silencio — es el caso que antes se moría callado.
+   */
+  function pintarWa(c) {
+    var link = String(c.wa || '');
+    var cod = String(c.wa_cod || '');
+    var hay = link.indexOf('https://wa.me/') === 0;
+    var otro = String(c.estado || '') === 'otro_numero';
+
+    $('waListo').classList.toggle('oculto', !hay);
+    // "Preparando" sólo mientras el espejo puede todavía traer el link. Si el
+    // código ya venció (no hay link ni código) y quedó el aviso de otro número,
+    // preparar no prepara nada: ahí lo único honesto es ofrecer pedir otro.
+    $('waPreparando').classList.toggle('oculto', hay || (otro && !cod));
+    $('waEsperando').classList.toggle('oculto', otro && !hay);
+    if (otro && !hay) $('esperaLento').classList.remove('oculto');
+
+    if (hay) {
+      $('waBoton').href = link;
+      var num = link.slice('https://wa.me/'.length).split('?')[0].replace(/[^0-9]/g, '');
+      $('waManual').innerHTML = '¿Estás en la computadora? Mandá <span class="wacod">'
+        + esc(cod) + '</span> por WhatsApp desde tu celular al <b>' + esc(telLindo(num)) + '</b>.';
+    }
+
+    $('waOtro').classList.toggle('oculto', !otro);
+    if (otro) {
+      // Sólo se llega acá si el número desde el que escribió YA está activo en
+      // otra cuenta: el único caso en que no se adopta solo, porque dejaría dos
+      // cuentas mandando alertas al mismo teléfono.
+      $('waOtro').innerHTML = 'Nos llegó tu código, pero desde un teléfono que ya está registrado '
+        + 'en otra cuenta. Para no mandarle avisos duplicados, ése no lo podemos usar: escribinos '
+        + 'desde el celular que anotaste (' + esc(c.tel || '') + ') o contanos qué pasó a '
+        + '<a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>.';
+    }
+  }
+
+  /** 5491136597788 -> +54 9 11 3659-7788. Para que lo pueda copiar a mano. */
+  function telLindo(n) {
+    if (/^549\d{10}$/.test(n)) {
+      return '+54 9 ' + n.slice(3, 5) + ' ' + n.slice(5, 9) + '-' + n.slice(9);
+    }
+    return '+' + n;
   }
 
   $('bActivar').addEventListener('click', function () {
@@ -409,7 +501,8 @@
       .then(function (j) {
         $('bContinuar').disabled = false; $('bContinuar').textContent = 'Continuar';
         if (j && (j.ok || j.esperar)) {
-          if (j.tel) $('esperaTexto').textContent = 'Te mandamos un código por WhatsApp al ' + j.tel + '.';
+          // El botón todavía no está: lo trae el espejo en ~1 min. La caja de
+          // espera muestra "preparando" hasta que aparezca.
           vista = 'espera';
           pollN = 0;
           refrescarVista();
@@ -452,6 +545,10 @@
           var estado = String(j.cuenta.estado || '');
           if (j.cuenta.ws || estado === 'verificado') {
             vista = null; pararPoll(); pintar(j.cuenta, j.pago || null);
+          } else {
+            // Sigue esperando, pero puede haber novedades que se ven acá: el
+            // link recién publicado por el espejo, o el estado 'otro_numero'.
+            refrescarVista();
           }
         })
         .catch(function () { /* siguiente vuelta */ });
