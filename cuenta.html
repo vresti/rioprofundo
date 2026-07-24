@@ -253,8 +253,15 @@
 (function () {
   var API = 'https://restless-smoke-596c.vresti.workers.dev';
   var LLAVE = 'rp_sesion';
-  var POLL_MS = 15000;      // cada cuánto se consulta /cuenta durante la espera
-  var POLL_MAX = 80;        // ~20 min y se deja de insistir (el código vence a los 30)
+  // ⚠️ CADENCIA DEL POLL (revisada 24/07/2026). El circuito puede cerrarse en
+  // ~1 min (ella manda el WhatsApp -> drenaje del minuto -> espejo), así que 15 s
+  // fijos hacían esperar de más justo en el tramo que decide la venta. Arranca a
+  // 5 s y afloja a 15 s pasados los 2 primeros minutos. Son lecturas de KV, que
+  // es la operación barata (100.000/día contra 1000 de `list`).
+  var POLL_MS = 5000;
+  var POLL_RAPIDO = 24;     // 24 × 5 s = los 2 primeros minutos, al ritmo rápido
+  var POLL_MAX = 360;       // 30 min = la vigencia del código (VER_VIGENCIA_MIN)
+  var ultimoFetch = 0;      // freno del refresco al volver a la pestaña
 
   var $ = function (id) { return document.getElementById(id); };
   var mail = '';
@@ -348,11 +355,33 @@
     try { localStorage.removeItem(LLAVE); } catch (e) {}
     pararPoll();
     pararPendiente();
+    // ⚠️ Sin esto, el refresco al volver a la pestaña (`alVolver`) repintaría la
+    // cuenta de alguien que acaba de cerrar sesión.
+    token = null; vista = null; ultima = { c: null, pago: null }; ultimaCaja = '';
     $('email').value = ''; $('codigo').value = '';
     ver('p1');
   });
 
   // ---------- paso 3: mostrar la cuenta ----------
+
+  /**
+   * EL RELATO DEL WHATSAPP, en una línea (24/07/2026).
+   *
+   * `c.ws` es EL HECHO (col 2 llena = le llegan avisos de verdad); `c.estado` es
+   * en qué punto del trámite está. Hasta hoy esta fila miraba SÓLO `c.ws`, así
+   * que alguien recién verificado leía **"No activados"** y en toda la página no
+   * había una sola palabra sobre que faltaba pagar. De ahí salía, literal, "el
+   * cliente piensa que es gratis".
+   */
+  function estadoWaTxt(c) {
+    if (c.ws) return { t: 'Activos', k: 'on' };
+    var e = String(c.estado || '');
+    if (e === 'verificado')  return { t: 'Verificado · falta el pago', k: 'warn' };
+    if (e === 'verificando') return { t: 'Esperando tu WhatsApp', k: 'warn' };
+    if (e === 'otro_numero') return { t: 'Número a revisar', k: 'warn' };
+    return { t: 'No activados', k: 'off' };
+  }
+
   function fila(k, v, clase) {
     return '<div class="fila"><span class="k">' + k + '</span>'
          + '<span class="v ' + (clase || '') + '">' + v + '</span></div>';
@@ -363,7 +392,8 @@
 
     var h = '';
     h += fila('Avisos por mail', c.mail ? 'Activos' : 'Pausados', c.mail ? 'on' : 'off');
-    h += fila('Avisos por WhatsApp', c.ws ? 'Activos' : 'No activados', c.ws ? 'on' : 'off');
+    var w = estadoWaTxt(c);
+    h += fila('Avisos por WhatsApp', w.t, w.k);
     if (c.tel && c.tel !== '***') h += fila('Teléfono', esc(c.tel));
 
     if (c.ws && c.dias !== null && c.dias !== undefined) {
@@ -378,10 +408,17 @@
 
     pintarActivacion(c, pago);
 
+    // ⚠️ El pie NO puede decir "todo gratis" cuando hay un trámite de pago abierto:
+    // era la última línea que leía alguien recién verificado, y confirmaba
+    // exactamente lo que había que desmentir.
+    var eNota = String(c.estado || '');
     $('notaWa').innerHTML = c.ws
       ? 'Los avisos por WhatsApp son <b>mejor esfuerzo</b>; los de mail son la base y no se interrumpen.'
-      : 'Los avisos por mail son gratis y siempre lo van a ser. '
-        + '¿Dudas? Escribinos a <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>.';
+      : (eNota === 'verificado')
+        ? 'Tu número quedó verificado. Falta <b style="color:var(--espuma)">la transferencia</b> '
+          + 'para prender los avisos por WhatsApp — los de mail siguen gratis igual.'
+        : 'Los avisos por mail son gratis y siempre lo van a ser. '
+          + '¿Dudas? Escribinos a <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>.';
 
     // Si el mail está Pausado, quedarse mirando hasta que pase a Activos (sin
     // recargar). No-op si ya está activo o si ya se está vigilando.
@@ -400,13 +437,31 @@
 
     if (!c.ws && c.tel && c.tel !== '***') {
       var estado = String(c.estado || '');
-      if (vista === 'form') mostrar = 'actForm';
+      // ⚠️⚠️ `verificado` GANA SOBRE `vista`, Y ESE ORDEN NO ES COSMÉTICO (24/07/2026).
+      //
+      // Antes `vista === 'espera'` se evaluaba primero. `vista` la fija el submit
+      // del formulario y **la limpiaba UNA SOLA COSA**: la rama verificada del
+      // poll de 15 s. Si ese poll no corría —y no corre cuando el navegador
+      // congela la pestaña, que es EXACTAMENTE lo que pasa mientras la persona
+      // está en WhatsApp mandando el código— la pantalla se quedaba en
+      // "Esperando tu mensaje…" para siempre, aunque cada `/cuenta` viniera
+      // diciendo `verificado`. Peor: el vigía del mail repinta cada 5 s y
+      // repintaba PARA ATRÁS, porque honraba `vista` igual.
+      // Con el estado primero, CUALQUIER repintado sana la pantalla solo.
+      if (estado === 'verificado') { vista = null; mostrar = 'actPago'; }
+      else if (vista === 'form') mostrar = 'actForm';
       else if (vista === 'espera' || estado === 'verificando' || estado === 'otro_numero') mostrar = 'actEspera';
-      else if (estado === 'verificado') mostrar = 'actPago';
       else mostrar = 'actBoton';
     }
 
     cajas.forEach(function (id) { $(id).classList.toggle('oculto', id !== mostrar); });
+
+    // Si venía esperando y ahora hay que pagar, llevarle la vista al importe:
+    // el cambio ocurre mientras mira otra cosa y puede pasar desapercibido.
+    if (mostrar === 'actPago' && ultimaCaja && ultimaCaja !== 'actPago') {
+      try { $('actPago').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+    }
+    ultimaCaja = mostrar;
 
     if (mostrar === 'actBoton') {
       $('actPrecio').innerHTML = (pago && pago.precio)
@@ -536,7 +591,39 @@
   });
 
   var ultima = { c: null, pago: null };
+  var ultimaCaja = '';      // qué caja se mostró la vez anterior (para el scroll)
   function refrescarVista() { if (ultima.c) pintarActivacion(ultima.c, ultima.pago); }
+
+  /**
+   * ⚠️⚠️ VOLVER A LA PESTAÑA ES EL MOMENTO MÁS IMPORTANTE DE TODO EL CIRCUITO,
+   * y hasta el 24/07/2026 no disparaba absolutamente nada.
+   *
+   * El botón `wa.me` se lleva a la persona AFUERA del navegador: manda el código
+   * por WhatsApp, lee nuestra respuesta ("verificamos tu número, el importe está
+   * en tu cuenta") y recién entonces vuelve. Mientras estuvo afuera, el navegador
+   * **congela los timers** de la pestaña de fondo (Chrome y iOS suspenden; a los
+   * minutos directamente la congelan), así que el poll pudo no haber corrido ni
+   * una vez. Volvía a una pantalla que decía "Esperando tu mensaje…" con el
+   * trámite YA HECHO, y sin nada que le dijera que faltaba pagar.
+   *
+   * Preguntar de nuevo al volver cuesta una lectura de KV y tapa el agujero
+   * entero: es el gesto que hace la persona justo cuando hay novedades.
+   */
+  function alVolver() {
+    if (!token || document.hidden) return;
+    if (Date.now() - ultimoFetch < 3000) return;   // un solo pedido por gesto
+    ultimoFetch = Date.now();
+    post('/cuenta', { token: token })
+      .then(function (j) {
+        if (!(j && j.ok && j.cuenta)) return;
+        ultima = { c: j.cuenta, pago: j.pago || null };
+        pintar(j.cuenta, j.pago || null);
+      })
+      .catch(function () { /* si falló, siguen los polls */ });
+  }
+  document.addEventListener('visibilitychange', alVolver);
+  window.addEventListener('pageshow', alVolver);
+  window.addEventListener('focus', alVolver);
 
   // Consulta /cuenta cada 15 s mientras se espera la respuesta por WhatsApp.
   // El circuito real tarda ~2-3 min (respuesta -> drenaje del minuto -> espejo),
@@ -550,7 +637,10 @@
         $('esperaLento').classList.remove('oculto');
         return;
       }
-      if (pollN >= 8) $('esperaLento').classList.remove('oculto');  // a los ~2 min ofrece reintentar
+      if (pollN >= POLL_RAPIDO) $('esperaLento').classList.remove('oculto');   // ~2 min: ofrece reintentar
+      // Pasados los 2 primeros minutos, 1 de cada 3 vueltas = 15 s.
+      if (pollN > POLL_RAPIDO && pollN % 3 !== 0) return;
+      ultimoFetch = Date.now();
       post('/cuenta', { token: token })
         .then(function (j) {
           if (!(j && j.ok && j.cuenta)) return;                     // hipo transitorio: se reintenta solo
