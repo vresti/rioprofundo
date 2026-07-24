@@ -262,6 +262,14 @@
   var vista = null;         // null = decidir por estado; 'form' | 'espera' fijadas por el usuario
   var pollTimer = null;
   var pollN = 0;
+  // Vigía del estado de MAIL: cuando la cuenta se carga con "Avisos por mail"
+  // en Pausados (recién confirmó y el espejo todavía no lo refleja), re-consulta
+  // /cuenta unas veces para que pase a Activos SOLO, sin recargar. Se apaga en
+  // cuanto activa o a los ~2 min. Timer propio para no chocar con el de WhatsApp.
+  var pendTimer = null;
+  var pendN = 0;
+  var PEND_MS = 5000;       // cada 5 s
+  var PEND_MAX = 24;        // ~2 min (el espejo propaga en ~1 min tras el arreglo del drenaje)
 
   function ver(paso) {
     ['p1','p2','p3'].forEach(function (p) { $(p).classList.toggle('oculto', p !== paso); });
@@ -339,6 +347,7 @@
   $('salir').addEventListener('click', function () {
     try { localStorage.removeItem(LLAVE); } catch (e) {}
     pararPoll();
+    pararPendiente();
     $('email').value = ''; $('codigo').value = '';
     ver('p1');
   });
@@ -373,6 +382,10 @@
       ? 'Los avisos por WhatsApp son <b>mejor esfuerzo</b>; los de mail son la base y no se interrumpen.'
       : 'Los avisos por mail son gratis y siempre lo van a ser. '
         + '¿Dudas? Escribinos a <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>.';
+
+    // Si el mail está Pausado, quedarse mirando hasta que pase a Activos (sin
+    // recargar). No-op si ya está activo o si ya se está vigilando.
+    vigilarPendiente(c);
 
     ver('p3');
   }
@@ -557,6 +570,29 @@
   function pararPoll() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     $('esperaLento').classList.add('oculto');
+  }
+
+  // Vigía del estado de MAIL (ver comentario de las variables). Bounded y con su
+  // propio timer: no interfiere con el poll de la activación de WhatsApp.
+  function vigilarPendiente(c) {
+    if (pendTimer) return;          // ya vigilando
+    if (c.mail) return;             // ya activo: nada que vigilar
+    pendN = 0;
+    pendTimer = setInterval(function () {
+      pendN++;
+      if (pendN > PEND_MAX) { pararPendiente(); return; }
+      post('/cuenta', { token: token })
+        .then(function (j) {
+          if (!(j && j.ok && j.cuenta)) return;       // hipo: se reintenta solo
+          ultima = { c: j.cuenta, pago: j.pago || null };
+          if (j.cuenta.mail) pararPendiente();         // pasó a Activos: cortamos
+          pintar(j.cuenta, j.pago || null);            // repinta (y refleja el cambio)
+        })
+        .catch(function () { /* siguiente vuelta */ });
+    }, PEND_MS);
+  }
+  function pararPendiente() {
+    if (pendTimer) { clearInterval(pendTimer); pendTimer = null; }
   }
 
   function cargar(t) {
