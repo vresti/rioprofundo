@@ -60,7 +60,12 @@
   .aviso { font-size:.8rem; line-height:1.6; margin-top:14px; padding:11px 13px; border-radius:9px; }
   .aviso.mal  { color:var(--rojo);  background:rgba(232,85,107,.1);  border:1px solid rgba(232,85,107,.25); }
   .aviso.bien { color:var(--verde); background:rgba(79,209,165,.1);  border:1px solid rgba(79,209,165,.25); }
-  .oculto { display:none; }
+  /* ⚠️ `!important` a propósito: hay clases definidas MÁS ABAJO que también fijan
+     `display` (.espera-txt es flex, .medicion es block). Con la misma
+     especificidad gana la última del archivo, así que sin esto esos elementos
+     NO se podrían ocultar — y la caja de medición se vería vacía en todas las
+     cuentas. Ocultar tiene que ganar siempre. */
+  .oculto { display:none !important; }
 
   .fila {
     display:flex; justify-content:space-between; align-items:baseline; gap:12px;
@@ -93,6 +98,19 @@
   .dato .v { text-align:right; word-break:break-all; user-select:all; -webkit-user-select:all; }
   .latido { display:inline-block; animation:latido 1.6s ease-in-out infinite; }
   @keyframes latido { 0%,100%{opacity:.35} 50%{opacity:1} }
+
+  /* Spinner: que se vea que el sistema ESTÁ haciendo algo. Un latido de texto
+     solo no alcanza — la persona no distingue "esperando" de "colgado", y toca
+     el botón cuatro veces. */
+  .spin {
+    display:inline-block; width:14px; height:14px; vertical-align:-2px;
+    border:2px solid rgba(143,178,196,.25); border-top-color:var(--cian);
+    border-radius:50%; animation:gira .8s linear infinite; margin-right:8px;
+  }
+  @keyframes gira { to { transform:rotate(360deg) } }
+  .espera-txt { display:flex; align-items:center; gap:0; font-size:.82rem; }
+  .medicion { margin-top:12px; font-size:.7rem; color:var(--niebla); line-height:1.6;
+              border-top:1px dashed var(--linea); padding-top:8px; }
 
   /* --- el botón wa.me (23/07/2026): el mensaje lo manda la persona, no nosotros --- */
   .wabtn {
@@ -242,7 +260,12 @@
       <!-- el código viaja por el espejo: hasta ~1 min desde que apretó Continuar -->
       <div id="waPreparando"><p class="latido">Preparando tu enlace…</p></div>
 
-      <p class="latido" id="waEsperando">Esperando tu mensaje…</p>
+      <p class="espera-txt" id="waEsperando"><span class="spin"></span><span id="waEsperandoTxt">Esperando tu mensaje…</span></p>
+      <!-- ⚠️ DECIR CUÁNTO PUEDE TARDAR ES LO QUE FRENA EL CLICK REPETIDO, más que
+           el spinner. La persona no se impacienta por esperar: se impacienta por
+           no saber si esto sigue vivo. Y son hasta ~2 min por dos pisos que no
+           podemos bajar (el trigger de GAS y la propagación de KV). -->
+      <p style="margin-top:6px;font-size:.76rem">Puede tardar hasta <b style="color:var(--espuma)">2 minutos</b>. No hace falta que lo mandes de nuevo.</p>
       <!-- Para el caso "mandé el WhatsApp desde el celular pero estoy mirando la
            notebook": ahí no hay gesto de volver a la pestaña, así que este botón
            es el que dispara la lectura en frío. Ver `proximoFresco`. -->
@@ -259,6 +282,10 @@
       <p style="margin-top:12px">Los centavos identifican tu pago, así que puede transferir cualquiera — no hace falta que la cuenta esté a tu nombre.</p>
       <p>Cuando se acredite, activamos tus avisos y te mandamos la factura por mail. En general, dentro del día.</p>
     </div>
+
+    <!-- Va FUERA de las cajas: si viviera adentro de la de espera, desaparecería
+         justo cuando se verifica, que es cuando hay que leer el número. -->
+    <div id="medicion" class="medicion oculto"></div>
 
     <div class="pie">
       <p id="notaWa"></p>
@@ -491,6 +518,43 @@
     return vieneDeConfirmar && (Date.now() - t0Pagina) < 4 * 60 * 1000;
   }
 
+  /**
+   * ⏱ MEDICIÓN DE LOS DOS TRAMOS (25/07/2026). Se enciende con `?medir=1`.
+   *
+   * La espera de la verificación son DOS pisos apilados y hay que saber cuál
+   * manda antes de gastar en arreglar el equivocado:
+   *   A) que GAS MIRE el mensaje entrante  -> trigger, 0-60 s, mínimo de Apps Script
+   *   B) que KV PROPAGUE lo que GAS escribió -> hasta 60 s, consistencia eventual
+   *
+   * El instrumento estaba a mano: **`_v` es el sello que el Worker le pone al
+   * espejo al escribirlo**, o sea el instante en que terminó A. Con eso:
+   *   A = _v            − (cuando tocaste el botón wa.me)
+   *   B = (cuando esta pantalla lo vio) − _v
+   *
+   * ⚠️ A incluye tu propio tiempo adentro de WhatsApp (tocar el botón no es
+   * mandar el mensaje). Para el número fino, cruzar con la hora del entrante en
+   * la hoja `Notificaciones` del motor.
+   */
+  var medir = /(^|[?&])medir=1(&|$)/.test(location.search);
+  var tClick = 0;
+  function hhmmss(ms) {
+    var d = new Date(ms);
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2)
+         + ':' + ('0' + d.getSeconds()).slice(-2);
+  }
+  function medirVerificado(c) {
+    if (!medir || !tClick) return;
+    var v = Number(c && c._v) || 0;
+    var t = Date.now();
+    var e = $('medicion');
+    e.classList.remove('oculto');
+    e.innerHTML = '⏱ <b>tocaste</b> ' + hhmmss(tClick)
+      + (v ? (' · <b>espejo escrito</b> ' + hhmmss(v) + ' (A: +' + Math.round((v - tClick) / 1000) + ' s)') : ' · (sin sello _v)')
+      + ' · <b>pantalla</b> ' + hhmmss(t)
+      + (v ? (' (B: +' + Math.round((t - v) / 1000) + ' s)') : '')
+      + ' · <b>total ' + Math.round((t - tClick) / 1000) + ' s</b>';
+  }
+
   var ultimoV = 0;
   function esViejo(c) {
     var v = Number(c && c._v) || 0;
@@ -581,6 +645,7 @@
     // el cambio ocurre mientras mira otra cosa y puede pasar desapercibido.
     if (mostrar === 'actPago' && ultimaCaja && ultimaCaja !== 'actPago') {
       try { $('actPago').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+      medirVerificado(c);   // ⏱ sólo con ?medir=1
     }
     ultimaCaja = mostrar;
 
@@ -643,6 +708,12 @@
 
     if (hay) {
       $('waBoton').href = link;
+      // ⏱ El instante en que toca el botón: arranque del cronómetro (y del
+      // "esperando" de verdad). Se registra una sola vez.
+      $('waBoton').onclick = function () {
+        if (!tClick) tClick = Date.now();
+        $('waEsperandoTxt').textContent = 'Esperando tu mensaje…';
+      };
       var num = link.slice('https://wa.me/'.length).split('?')[0].replace(/[^0-9]/g, '');
       $('waManual').innerHTML = '¿Estás en la computadora? Mandá <span class="wacod">'
         + esc(cod) + '</span> por WhatsApp desde tu celular al <b>' + esc(telLindo(num)) + '</b>.';
@@ -723,26 +794,45 @@
   // "Ya lo mandé · comprobar ahora": lectura en frío a pedido. Es la vía rápida
   // cuando la persona mandó el WhatsApp desde el celular y mira la notebook, o
   // simplemente no quiere esperar al timer.
+  /**
+   * ⚠️ EL BOTÓN SE BLOQUEA DESPUÉS DE UNA COMPROBACIÓN FALLIDA, con cuenta
+   * regresiva. Sin esto la persona lo toca cuatro veces seguidas —lo cual no
+   * acelera nada, porque lo que falta es que el estado LLEGUE— y encima cada
+   * toque consume una lectura. El freno no es para protegernos a nosotros: es
+   * para que ella deje de pelear con una pantalla que no puede ir más rápido.
+   */
+  var yaT = null;
+  function frenarYaMande(seg) {
+    var b = $('yaMande');
+    if (yaT) clearInterval(yaT);
+    b.disabled = true;
+    var tick = function () {
+      b.textContent = seg > 0 ? ('Comprobar de nuevo (' + seg + 's)') : 'Ya lo mandé · comprobar ahora';
+      if (seg <= 0) { clearInterval(yaT); yaT = null; b.disabled = false; }
+      seg--;
+    };
+    tick();
+    yaT = setInterval(tick, 1000);
+  }
+
   $('yaMande').addEventListener('click', function () {
     var b = $('yaMande');
-    b.disabled = true; b.textContent = 'Comprobando…';
+    if (b.disabled) return;
+    b.disabled = true; b.innerHTML = '<span class="spin"></span>Comprobando…';
     post('/cuenta', { token: token, fresco: proximoFresco() })
       .then(function (j) {
-        b.disabled = false; b.textContent = 'Ya lo mandé · comprobar ahora';
-        if (!(j && j.ok && j.cuenta)) return;
-        if (esViejo(j.cuenta)) return;
+        if (!(j && j.ok && j.cuenta) || esViejo(j.cuenta)) { frenarYaMande(10); return; }
         ultima = { c: j.cuenta, pago: j.pago || null };
         var e = String(j.cuenta.estado || '');
         // Si ya está, `pintar` lo lleva solo a la pantalla de pago (el estado del
         // servidor gana sobre `vista`). Si todavía no, se lo decimos sin drama.
         pintar(j.cuenta, j.pago || null);
         if (!j.cuenta.ws && e !== 'verificado') {
-          $('waEsperando').textContent = 'Todavía no nos llegó. Puede tardar hasta un minuto…';
+          $('waEsperandoTxt').textContent = 'Todavía no nos llegó. Seguimos esperando…';
+          frenarYaMande(10);
         }
       })
-      .catch(function () {
-        b.disabled = false; b.textContent = 'Ya lo mandé · comprobar ahora';
-      });
+      .catch(function () { frenarYaMande(10); });
   });
 
   var ultima = { c: null, pago: null };
