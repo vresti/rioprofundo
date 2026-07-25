@@ -301,27 +301,25 @@
 (function () {
   var API = 'https://restless-smoke-596c.vresti.workers.dev';
   var LLAVE = 'rp_sesion';
-  // ⚠️⚠️ SE POLEA LENTO A PROPÓSITO, Y ES CONTRAINTUITIVO (25/07/2026).
+  // ⚠️⚠️ LA REGLA DEL POLL: `intervalo × claves > 60 s`  (25/07/2026, medido)
   //
-  // El espejo vive en KV, y KV **cachea cada clave en el borde por 60 s** (ése es
-  // su mínimo, no se puede bajar). Lo importante: el caché se re-arma EN CADA
-  // LECTURA. O sea que poleando cada 5 s nos garantizábamos ver el estado hasta
-  // un minuto viejo: no era que el poll no alcanzara — **el poll era la causa**.
-  // Medido el 25/07: GAS matcheaba el WhatsApp y publicaba `verificado` en 9-83 s,
-  // y la pantalla seguía en "Esperando tu mensaje…" porque le servían la copia
-  // cacheada que ella misma mantenía caliente.
+  // KV cachea cada clave en el borde por 60 s (su mínimo) y **el caché se re-arma
+  // en cada lectura**. Primero se dedujo mal la conclusión: "hay que polear
+  // lento". Se probó a 70 s y **la medición lo desmintió** — un cambio ya escrito
+  // tardó 63 s en verse, o sea casi un tick entero: el timer era el cuello de
+  // botella, no KV.
   //
-  // Poleando cada 70 s la clave queda SIN LEER más de un minuto, así que cada
-  // lectura es "fría" y viene fresca del almacén central. Y el momento que de
-  // verdad importa —cuando vuelve de WhatsApp— lo cubre `alVolver`, que también
-  // cae en frío justamente porque nadie estuvo leyendo mientras ella no estaba.
+  // La regla verdadera es otra: lo que tiene que superar los 60 s **no es el
+  // intervalo, es cada cuánto se relee LA MISMA CLAVE**. Con 6 claves espejo
+  // rotativas (`f0..f5`, que escribe el Worker) y 15 s de intervalo, cada clave se
+  // relee cada 90 s → siempre en frío, y la pantalla reacciona 4× más rápido.
   //
-  // ⚠️ NO BAJAR ESTE NÚMERO por debajo de ~65 s "para que reaccione más rápido":
-  // hace exactamente lo contrario. Cualquier poll nuevo sobre `/cuenta` tiene que
-  // respetar la misma regla.
-  var POLL_MS = 70000;
-  var POLL_MAX = 26;        // ~30 min = la vigencia del código (VER_VIGENCIA_MIN)
-  var POLL_LENTO = 3;       // a las ~3 vueltas (~3 min) se ofrece pedir otro código
+  // ⚠️ SI SE CAMBIA UNO DE LOS DOS NÚMEROS, REHACER LA CUENTA. Y si algún día hay
+  // dos timers leyendo a la vez, el divisor se duplica: por eso acá hay UNO SOLO.
+  var POLL_MS = 15000;
+  var POLL_CLAVES = 6;      // f0..f5 — las escribe `recibirEspejo` en el Worker
+  var POLL_MAX = 120;       // 120 × 15 s = 30 min (la vigencia del código)
+  var POLL_LENTO = 12;      // a los ~3 min se ofrece pedir otro código
 
   var $ = function (id) { return document.getElementById(id); };
   var mail = '';
@@ -333,12 +331,6 @@
   // en Pausados (recién confirmó y el espejo todavía no lo refleja), re-consulta
   // /cuenta unas veces para que pase a Activos SOLO, sin recargar. Se apaga en
   // cuanto activa o a los ~2 min. Timer propio para no chocar con el de WhatsApp.
-  var pendTimer = null;
-  var pendN = 0;
-  // ⚠️ Misma regla que `POLL_MS`: lento para que la lectura sea fría. A 5 s este
-  // vigía se leía el caché a sí mismo y podía no ver NUNCA el cambio a Activos.
-  var PEND_MS = 70000;
-  var PEND_MAX = 5;         // ~5 min
 
   function ver(paso) {
     ['p1','p2','p3'].forEach(function (p) { $(p).classList.toggle('oculto', p !== paso); });
@@ -461,7 +453,7 @@
   $('salir').addEventListener('click', function () {
     try { localStorage.removeItem(LLAVE); } catch (e) {}
     pararPoll();
-    pararPendiente();
+
     // ⚠️ Sin esto, el refresco al volver a la pestaña (`alVolver`) repintaría la
     // cuenta de alguien que acaba de cerrar sesión.
     token = null; vista = null; ultima = { c: null, pago: null }; ultimaCaja = '';
@@ -605,9 +597,8 @@
         : 'Los avisos por mail son gratis y siempre lo van a ser. '
           + '¿Dudas? Escribinos a <a href="mailto:info@rioprofundo.com">info@rioprofundo.com</a>.';
 
-    // Si el mail está Pausado, quedarse mirando hasta que pase a Activos (sin
-    // recargar). No-op si ya está activo o si ya se está vigilando.
-    vigilarPendiente(c);
+    // Un solo timer para las dos esperas (mail y WhatsApp). Ver `hayQueEsperar`.
+    sincronizarPoll(c);
 
     ver('p3');
   }
@@ -655,8 +646,10 @@
         : 'Pago único anual por transferencia.';
     }
 
-    if (mostrar === 'actEspera') { pintarWa(c); empezarPoll(); }
-    else if (mostrar !== 'actForm') { pararPoll(); }
+    // ⚠️ Acá NO se prende ni se apaga el timer. Quién espera y hasta cuándo lo
+    // decide `hayQueEsperar` sobre el ESTADO, no sobre qué caja se ve: atarlo a la
+    // caja apagaba la vigilancia del mail cuando se mostraba otra cosa.
+    if (mostrar === 'actEspera') pintarWa(c);
 
     if (mostrar === 'actPago') {
       if (pago && pago.importe) {
@@ -819,7 +812,10 @@
     var b = $('yaMande');
     if (b.disabled) return;
     b.disabled = true; b.innerHTML = '<span class="spin"></span>Comprobando…';
-    post('/cuenta', { token: token, fresco: proximoFresco() })
+    // ⚡ Vía VIVA: le pregunta a GAS, que va y mira la hoja del hub en el momento
+    // (y si el mensaje está, lo procesa ahí mismo). Es el camino rápido y por eso
+    // cuelga de un gesto, no de un timer.
+    post('/comprobar', { token: token })
       .then(function (j) {
         if (!(j && j.ok && j.cuenta) || esViejo(j.cuenta)) { frenarYaMande(10); return; }
         ultima = { c: j.cuenta, pago: j.pago || null };
@@ -838,7 +834,11 @@
   var ultima = { c: null, pago: null };
   var ultimaCaja = '';      // qué caja se mostró la vez anterior (para el scroll)
   var waLocal = { link: '', cod: '' };   // el link que ya nos dio el Worker (ver pintarWa)
-  function refrescarVista() { if (ultima.c) pintarActivacion(ultima.c, ultima.pago); }
+  function refrescarVista() {
+    if (!ultima.c) return;
+    pintarActivacion(ultima.c, ultima.pago);
+    sincronizarPoll(ultima.c);   // el submit del formulario deja `vista='espera'`
+  }
 
   /**
    * ⚠️⚠️ VOLVER A LA PESTAÑA ES EL MOMENTO MÁS IMPORTANTE DE TODO EL CIRCUITO,
@@ -867,7 +867,7 @@
    * lo pone al poll, las claves `f` se calientan y el truco se apaga solo.
    */
   var frescoN = 0;
-  function proximoFresco() { frescoN = (frescoN + 1) % 3; return frescoN; }
+  function proximoFresco() { frescoN = (frescoN + 1) % POLL_CLAVES; return frescoN; }
 
   var ultimoVolver = 0;
   function alVolver() {
@@ -879,7 +879,12 @@
     // vino a buscar al volver de WhatsApp, que es LA que importa.
     if (Date.now() - ultimoVolver < 1200) return;
     ultimoVolver = Date.now();
-    post('/cuenta', { token: token, fresco: proximoFresco() })
+    // ⚡ Si está esperando la verificación, este regreso es EL momento: se usa la
+    // vía viva (GAS mira la hoja ahora). Si no espera nada, alcanza con el espejo,
+    // que es barato — no hay que poner a GAS en cada cambio de pestaña.
+    var viva = esperandoWa(ultima.c);
+    post(viva ? '/comprobar' : '/cuenta',
+         viva ? { token: token } : { token: token, fresco: proximoFresco() })
       .then(function (j) {
         if (!(j && j.ok && j.cuenta)) return;
         if (esViejo(j.cuenta)) return;
@@ -907,7 +912,9 @@
         return;
       }
       if (pollN >= POLL_LENTO) $('esperaLento').classList.remove('oculto');   // ~3 min: ofrece reintentar
-      post('/cuenta', { token: token })
+      // ⚠️ El poll USA la rotación de claves frías. Es lo que le permite ir a 15 s
+      // sin leerse el caché a sí mismo (ver la regla en `POLL_MS`).
+      post('/cuenta', { token: token, fresco: proximoFresco() })
         .then(function (j) {
           if (!(j && j.ok && j.cuenta)) return;                     // hipo transitorio: se reintenta solo
           if (esViejo(j.cuenta)) return;                            // llegó tarde una copia vieja
@@ -916,9 +923,12 @@
           if (j.cuenta.ws || estado === 'verificado') {
             vista = null; pararPoll(); pintar(j.cuenta, j.pago || null);
           } else {
-            // Sigue esperando, pero puede haber novedades que se ven acá: el
-            // link recién publicado por el espejo, o el estado 'otro_numero'.
-            refrescarVista();
+            // Sigue esperando. Se repinta ENTERO (no sólo la caja de activación)
+            // porque este mismo timer es el que ve pasar el mail de Pausados a
+            // Activos: antes eso lo miraba un segundo timer, que además duplicaba
+            // la frecuencia de lectura por clave y rompía la cuenta de arriba.
+            pintar(j.cuenta, j.pago || null);
+            if (!hayQueEsperar(j.cuenta)) pararPoll();
           }
         })
         .catch(function () { /* siguiente vuelta */ });
@@ -929,28 +939,34 @@
     $('esperaLento').classList.add('oculto');
   }
 
-  // Vigía del estado de MAIL (ver comentario de las variables). Bounded y con su
-  // propio timer: no interfiere con el poll de la activación de WhatsApp.
-  function vigilarPendiente(c) {
-    if (pendTimer) return;          // ya vigilando
-    if (c.mail) return;             // ya activo: nada que vigilar
-    pendN = 0;
-    pendTimer = setInterval(function () {
-      pendN++;
-      if (pendN > PEND_MAX) { pararPendiente(); return; }
-      post('/cuenta', { token: token })
-        .then(function (j) {
-          if (!(j && j.ok && j.cuenta)) return;       // hipo: se reintenta solo
-          if (esViejo(j.cuenta)) return;              // copia vieja: no repintar para atrás
-          ultima = { c: j.cuenta, pago: j.pago || null };
-          if (j.cuenta.mail) pararPendiente();         // pasó a Activos: cortamos
-          pintar(j.cuenta, j.pago || null);            // repinta (y refleja el cambio)
-        })
-        .catch(function () { /* siguiente vuelta */ });
-    }, PEND_MS);
+  /**
+   * ¿Hay algo que esperar? UN SOLO timer para las dos esperas que existen:
+   *   · el mail que todavía no pasó a Activos (recién confirmado), y
+   *   · la verificación del WhatsApp en curso.
+   *
+   * ⚠️ Antes eran dos timers y no era sólo desprolijo: **duplicaban la frecuencia
+   * de lectura por clave** y por lo tanto rompían la cuenta `intervalo × claves >
+   * 60 s`, que es lo único que mantiene las lecturas en frío.
+   */
+  function hayQueEsperar(c) {
+    if (!c) return false;
+    return !c.mail || esperandoWa(c);
   }
-  function pararPendiente() {
-    if (pendTimer) { clearInterval(pendTimer); pendTimer = null; }
+
+  /**
+   * ¿Está esperando la verificación del WhatsApp? Es la espera que justifica la
+   * VÍA VIVA (`/comprobar`, que pone a GAS en el camino): la otra —el mail
+   * pasando a Activos— la resuelve el espejo sin apuro.
+   */
+  function esperandoWa(c) {
+    if (!c || c.ws) return false;
+    var e = String(c.estado || '');
+    return vista === 'espera' || e === 'verificando' || e === 'otro_numero';
+  }
+
+  /** Prende o apaga el único timer según si queda algo por esperar. */
+  function sincronizarPoll(c) {
+    if (hayQueEsperar(c)) empezarPoll(); else pararPoll();
   }
 
   function cargar(t) {
