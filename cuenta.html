@@ -243,6 +243,10 @@
       <div id="waPreparando"><p class="latido">Preparando tu enlace…</p></div>
 
       <p class="latido" id="waEsperando">Esperando tu mensaje…</p>
+      <!-- Para el caso "mandé el WhatsApp desde el celular pero estoy mirando la
+           notebook": ahí no hay gesto de volver a la pestaña, así que este botón
+           es el que dispara la lectura en frío. Ver `proximoFresco`. -->
+      <p style="margin-top:10px"><button class="link" id="yaMande">Ya lo mandé · comprobar ahora</button></p>
       <p id="esperaLento" class="oculto">¿Se trabó? <button class="link" id="reintentar">Pedí otro código</button>.</p>
     </div>
 
@@ -676,6 +680,30 @@
     vista = 'form'; limpiar('avisoAct'); refrescarVista();
   });
 
+  // "Ya lo mandé · comprobar ahora": lectura en frío a pedido. Es la vía rápida
+  // cuando la persona mandó el WhatsApp desde el celular y mira la notebook, o
+  // simplemente no quiere esperar al timer.
+  $('yaMande').addEventListener('click', function () {
+    var b = $('yaMande');
+    b.disabled = true; b.textContent = 'Comprobando…';
+    post('/cuenta', { token: token, fresco: proximoFresco() })
+      .then(function (j) {
+        b.disabled = false; b.textContent = 'Ya lo mandé · comprobar ahora';
+        if (!(j && j.ok && j.cuenta)) return;
+        ultima = { c: j.cuenta, pago: j.pago || null };
+        var e = String(j.cuenta.estado || '');
+        // Si ya está, `pintar` lo lleva solo a la pantalla de pago (el estado del
+        // servidor gana sobre `vista`). Si todavía no, se lo decimos sin drama.
+        pintar(j.cuenta, j.pago || null);
+        if (!j.cuenta.ws && e !== 'verificado') {
+          $('waEsperando').textContent = 'Todavía no nos llegó. Puede tardar hasta un minuto…';
+        }
+      })
+      .catch(function () {
+        b.disabled = false; b.textContent = 'Ya lo mandé · comprobar ahora';
+      });
+  });
+
   var ultima = { c: null, pago: null };
   var ultimaCaja = '';      // qué caja se mostró la vez anterior (para el scroll)
   var waLocal = { link: '', cod: '' };   // el link que ya nos dio el Worker (ver pintarWa)
@@ -696,6 +724,20 @@
    * Preguntar de nuevo al volver cuesta una lectura de KV y tapa el agujero
    * entero: es el gesto que hace la persona justo cuando hay novedades.
    */
+  /**
+   * ⚡ LECTURA EN FRÍO, ROTANDO LA CLAVE (25/07/2026).
+   *
+   * El Worker guarda la misma foto del espejo en `u:` (la que polea el timer) y en
+   * `f0/f1/f2:` (para los gestos). Como ningún timer toca las `f`, cada lectura
+   * cae fuera del caché de 60 s de KV y trae el estado real. Se rota el índice
+   * para que dos gestos seguidos tampoco se lean el caché entre ellos.
+   *
+   * ⚠️ Esto va SÓLO en los gestos —volver a la pestaña, tocar Actualizar—. Si se
+   * lo pone al poll, las claves `f` se calientan y el truco se apaga solo.
+   */
+  var frescoN = 0;
+  function proximoFresco() { frescoN = (frescoN + 1) % 3; return frescoN; }
+
   var ultimoVolver = 0;
   function alVolver() {
     if (!token || document.hidden) return;
@@ -706,7 +748,7 @@
     // vino a buscar al volver de WhatsApp, que es LA que importa.
     if (Date.now() - ultimoVolver < 1200) return;
     ultimoVolver = Date.now();
-    post('/cuenta', { token: token })
+    post('/cuenta', { token: token, fresco: proximoFresco() })
       .then(function (j) {
         if (!(j && j.ok && j.cuenta)) return;
         ultima = { c: j.cuenta, pago: j.pago || null };
