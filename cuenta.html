@@ -129,8 +129,10 @@
        ''            -> botón "Activar" -> formulario (nombre+domicilio, consumidor
                         final, V1) -> POST /activar -> espera
        'verificando' -> botón wa.me: la persona NOS manda el código (23/07/2026;
-                        antes se lo mandábamos nosotros). La página consulta
-                        /cuenta cada 15 s hasta que su mensaje lo verifique.
+                        antes se lo mandábamos nosotros). El link lo da el Worker
+                        en el acto (25/07). La página espera el cambio de estado
+                        con un poll LENTO + un refresco al volver a la pestaña
+                        (ver `POLL_MS`: rápido es peor, por el caché de KV).
        'otro_numero' -> nos escribió desde un teléfono que YA está activo en otra
                         cuenta: es el único caso que no se arregla solo (si el
                         número está libre, GAS lo adopta y verifica igual)
@@ -176,7 +178,15 @@
       <button type="submit" id="bCodigo">Entrar</button>
     </form>
     <div id="aviso2" class="aviso oculto"></div>
-    <div class="pie"><button class="link" id="volver">Usar otro mail</button></div>
+    <div class="pie">
+      <!-- ⚠️ El reenvío es EXPLÍCITO y con cuenta regresiva a propósito. Antes la
+           única salida era "Usar otro mail" -> volver a pedir, y como el código
+           rotaba, la impaciencia rompía el código que estaba llegando. Ahora el
+           Worker reusa el mismo código, y esto además le dice cuánto falta en vez
+           de dejarla probando. -->
+      <button class="link" id="reenviar">Reenviar el código</button> ·
+      <button class="link" id="volver">Usar otro mail</button>
+    </div>
   </div>
 
   <!-- ---------- PASO 3: la cuenta ---------- -->
@@ -260,15 +270,27 @@
 (function () {
   var API = 'https://restless-smoke-596c.vresti.workers.dev';
   var LLAVE = 'rp_sesion';
-  // ⚠️ CADENCIA DEL POLL (revisada 24/07/2026). El circuito puede cerrarse en
-  // ~1 min (ella manda el WhatsApp -> drenaje del minuto -> espejo), así que 15 s
-  // fijos hacían esperar de más justo en el tramo que decide la venta. Arranca a
-  // 5 s y afloja a 15 s pasados los 2 primeros minutos. Son lecturas de KV, que
-  // es la operación barata (100.000/día contra 1000 de `list`).
-  var POLL_MS = 5000;
-  var POLL_RAPIDO = 24;     // 24 × 5 s = los 2 primeros minutos, al ritmo rápido
-  var POLL_MAX = 360;       // 30 min = la vigencia del código (VER_VIGENCIA_MIN)
-  var ultimoFetch = 0;      // freno del refresco al volver a la pestaña
+  // ⚠️⚠️ SE POLEA LENTO A PROPÓSITO, Y ES CONTRAINTUITIVO (25/07/2026).
+  //
+  // El espejo vive en KV, y KV **cachea cada clave en el borde por 60 s** (ése es
+  // su mínimo, no se puede bajar). Lo importante: el caché se re-arma EN CADA
+  // LECTURA. O sea que poleando cada 5 s nos garantizábamos ver el estado hasta
+  // un minuto viejo: no era que el poll no alcanzara — **el poll era la causa**.
+  // Medido el 25/07: GAS matcheaba el WhatsApp y publicaba `verificado` en 9-83 s,
+  // y la pantalla seguía en "Esperando tu mensaje…" porque le servían la copia
+  // cacheada que ella misma mantenía caliente.
+  //
+  // Poleando cada 70 s la clave queda SIN LEER más de un minuto, así que cada
+  // lectura es "fría" y viene fresca del almacén central. Y el momento que de
+  // verdad importa —cuando vuelve de WhatsApp— lo cubre `alVolver`, que también
+  // cae en frío justamente porque nadie estuvo leyendo mientras ella no estaba.
+  //
+  // ⚠️ NO BAJAR ESTE NÚMERO por debajo de ~65 s "para que reaccione más rápido":
+  // hace exactamente lo contrario. Cualquier poll nuevo sobre `/cuenta` tiene que
+  // respetar la misma regla.
+  var POLL_MS = 70000;
+  var POLL_MAX = 26;        // ~30 min = la vigencia del código (VER_VIGENCIA_MIN)
+  var POLL_LENTO = 3;       // a las ~3 vueltas (~3 min) se ofrece pedir otro código
 
   var $ = function (id) { return document.getElementById(id); };
   var mail = '';
@@ -282,8 +304,10 @@
   // cuanto activa o a los ~2 min. Timer propio para no chocar con el de WhatsApp.
   var pendTimer = null;
   var pendN = 0;
-  var PEND_MS = 5000;       // cada 5 s
-  var PEND_MAX = 24;        // ~2 min (el espejo propaga en ~1 min tras el arreglo del drenaje)
+  // ⚠️ Misma regla que `POLL_MS`: lento para que la lectura sea fría. A 5 s este
+  // vigía se leía el caché a sí mismo y podía no ver NUNCA el cambio a Activos.
+  var PEND_MS = 70000;
+  var PEND_MAX = 5;         // ~5 min
 
   function ver(paso) {
     ['p1','p2','p3'].forEach(function (p) { $(p).classList.toggle('oculto', p !== paso); });
@@ -323,7 +347,17 @@
         $('bMail').disabled = false; $('bMail').textContent = 'Mandame el código';
         // Responde lo mismo exista o no el mail: es a propósito, para que el
         // formulario no sirva para averiguar quién está suscripto.
-        if (j && j.ok) { ver('p2'); $('codigo').focus(); }
+        if (j && j.ok) {
+          // Honestidad con el tiempo (25/07/2026). El código sale por el drenaje
+          // de GAS (trigger de 1 min), así que puede tardar un par de minutos —
+          // y callarlo era lo que hacía que la gente pidiera código tras código.
+          $('dondeFue').innerHTML = j.demora
+            ? 'Si ese mail está registrado, el código ya salió. <b style="color:var(--espuma)">Puede '
+              + 'tardar hasta un par de minutos</b> — si no lo ves, mirá también en spam. '
+              + 'No pidas otro: el que te llegue va a servir igual.'
+            : 'Si ese mail está registrado, te llegó un código.';
+          ver('p2'); $('codigo').focus(); frenarReenvio();
+        }
         else { aviso('aviso1', 'mal', (j && j.msg) || 'No se pudo. Probá de nuevo.'); }
       })
       .catch(function () {
@@ -357,6 +391,41 @@
   });
 
   $('volver').addEventListener('click', function () { limpiar('aviso2'); ver('p1'); });
+
+  /**
+   * REENVÍO CON CUENTA REGRESIVA (25/07/2026).
+   *
+   * El Worker frena un envío por minuto por usuario (si no, `/entrar` es una
+   * máquina de mandarle mails a un tercero posteando su dirección en loop). Antes
+   * ese freno era invisible: la persona pedía de nuevo, no pasaba nada, y no
+   * sabía por qué. Acá se muestra, así el botón sólo se ofrece cuando de verdad
+   * va a hacer algo. Y ahora reenviar manda EL MISMO código, no uno nuevo.
+   */
+  var reenvioT = null;
+  function frenarReenvio() {
+    var seg = 60;
+    if (reenvioT) clearInterval(reenvioT);
+    $('reenviar').disabled = true;
+    var pintarSeg = function () {
+      $('reenviar').textContent = seg > 0 ? ('Reenviar el código (' + seg + 's)') : 'Reenviar el código';
+      if (seg <= 0) { clearInterval(reenvioT); reenvioT = null; $('reenviar').disabled = false; }
+      seg--;
+    };
+    pintarSeg();
+    reenvioT = setInterval(pintarSeg, 1000);
+  }
+
+  $('reenviar').addEventListener('click', function () {
+    if ($('reenviar').disabled || !mail) return;
+    limpiar('aviso2');
+    frenarReenvio();
+    post('/entrar', { email: mail })
+      .then(function () {
+        aviso('aviso2', 'bien', 'Te lo mandamos de nuevo — es el mismo código, así que si te '
+          + 'llegan dos mails cualquiera de los dos sirve.');
+      })
+      .catch(function () { aviso('aviso2', 'mal', 'No se pudo conectar.'); });
+  });
 
   $('salir').addEventListener('click', function () {
     try { localStorage.removeItem(LLAVE); } catch (e) {}
@@ -627,10 +696,16 @@
    * Preguntar de nuevo al volver cuesta una lectura de KV y tapa el agujero
    * entero: es el gesto que hace la persona justo cuando hay novedades.
    */
+  var ultimoVolver = 0;
   function alVolver() {
     if (!token || document.hidden) return;
-    if (Date.now() - ultimoFetch < 3000) return;   // un solo pedido por gesto
-    ultimoFetch = Date.now();
+    // ⚠️ Freno CORTO y PROPIO: sólo para que `visibilitychange`, `focus` y
+    // `pageshow` —que llegan juntos en el mismo gesto— no disparen tres pedidos.
+    // No comparte reloj con el poll a propósito: si lo compartiera, un tick del
+    // poll ocurrido un segundo antes le robaría a la persona la lectura fría que
+    // vino a buscar al volver de WhatsApp, que es LA que importa.
+    if (Date.now() - ultimoVolver < 1200) return;
+    ultimoVolver = Date.now();
     post('/cuenta', { token: token })
       .then(function (j) {
         if (!(j && j.ok && j.cuenta)) return;
@@ -643,9 +718,11 @@
   window.addEventListener('pageshow', alVolver);
   window.addEventListener('focus', alVolver);
 
-  // Consulta /cuenta cada 15 s mientras se espera la respuesta por WhatsApp.
-  // El circuito real tarda ~2-3 min (respuesta -> drenaje del minuto -> espejo),
-  // así que 15 s sobra y son lecturas de KV, que es lo barato (100k/día).
+  // Consulta /cuenta mientras se espera el WhatsApp. Su ÚNICO trabajo ahora es
+  // detectar `verificado` (el link del botón ya no lo trae el espejo: lo da el
+  // Worker en el acto). Cadencia: ver el comentario de `POLL_MS` — va lento a
+  // propósito, para que cada lectura caiga en frío y traiga el estado real.
+  // La vía rápida de verdad es `alVolver`, no este timer.
   function empezarPoll() {
     if (pollTimer) return;
     pollTimer = setInterval(function () {
@@ -655,10 +732,7 @@
         $('esperaLento').classList.remove('oculto');
         return;
       }
-      if (pollN >= POLL_RAPIDO) $('esperaLento').classList.remove('oculto');   // ~2 min: ofrece reintentar
-      // Pasados los 2 primeros minutos, 1 de cada 3 vueltas = 15 s.
-      if (pollN > POLL_RAPIDO && pollN % 3 !== 0) return;
-      ultimoFetch = Date.now();
+      if (pollN >= POLL_LENTO) $('esperaLento').classList.remove('oculto');   // ~3 min: ofrece reintentar
       post('/cuenta', { token: token })
         .then(function (j) {
           if (!(j && j.ok && j.cuenta)) return;                     // hipo transitorio: se reintenta solo
