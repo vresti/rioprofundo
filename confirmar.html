@@ -120,7 +120,10 @@
           t.textContent = '¡Listo! Ya estás suscripto';
           p.innerHTML = 'Te vamos a avisar <b>por mail, gratis</b>, cuando el río se salga de lo '
             + 'normal.<br><br>Te estamos abriendo tu cuenta…';
-          setTimeout(function () { location.replace('/cuenta.html'); }, 1400);
+          // `?nuevo=1`: le dice a la cuenta que la confirmación ACABA de pasar, así
+          // muestra "Activando…" en vez de "Pausados" mientras el espejo se pone al
+          // día. Recién confirmado, "Pausados" es directamente falso.
+          setTimeout(function () { location.replace('/cuenta.html?nuevo=1'); }, 1400);
           return;
         }
 

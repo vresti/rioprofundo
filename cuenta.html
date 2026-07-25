@@ -468,11 +468,51 @@
          + '<span class="v ' + (clase || '') + '">' + v + '</span></div>';
   }
 
+  /**
+   * ⚠️⚠️ UN REPINTADO NUNCA PUEDE IR PARA ATRÁS (25/07/2026).
+   *
+   * El estado llega por DOS caminos con frescura distinta —el timer lee `u:`
+   * (puede venir cacheada) y los gestos leen `f0/f1/f2:` (siempre fría)— así que
+   * las respuestas pueden llegar DESORDENADAS. Sin esto, la cuenta parpadeaba
+   * entre "Activos" y "Pausados": se pintaba lo último que llegaba, no lo más
+   * nuevo. El `_v` lo sella el Worker al escribir el espejo.
+   *
+   * Ante la duda se ACEPTA (sellos ausentes = espejo viejo, todo vale 0): el
+   * riesgo de descartar de más es peor que el de un parpadeo.
+   */
+  /**
+   * ¿Venimos del link de confirmación recién? `confirmar.html` redirige con
+   * `?nuevo=1`. Se acota a unos minutos: pasado eso, si el mail sigue sin
+   * activarse, algo falló de verdad y hay que decirlo, no seguir tranquilizando.
+   */
+  var t0Pagina = Date.now();
+  var vieneDeConfirmar = /(^|[?&])nuevo=1(&|$)/.test(location.search);
+  function reciénConfirmado() {
+    return vieneDeConfirmar && (Date.now() - t0Pagina) < 4 * 60 * 1000;
+  }
+
+  var ultimoV = 0;
+  function esViejo(c) {
+    var v = Number(c && c._v) || 0;
+    if (!v) return false;          // sin sello no hay con qué ordenar: se acepta
+    if (v < ultimoV) return true;
+    ultimoV = v;
+    return false;
+  }
+
   function pintar(c, pago) {
     $('hola').textContent = c.nombre ? ('Hola, ' + c.nombre) : 'Tu cuenta';
 
+    // ⚠️ "Pausados" apenas confirmó es MENTIRA: no está pausado, el sistema está
+    // terminando de anotarlo (el `confirm` viaja por la cola y el espejo lo publica
+    // en la corrida siguiente). Cuando se entra desde el link del mail —`?nuevo=1`,
+    // o sea que la confirmación acaba de ocurrir— no existe el estado "pausado":
+    // sólo "todavía no llegó". Pasados unos minutos se deja de suponer y se dice
+    // lo que hay, porque si de verdad algo falló, ocultarlo sería peor.
     var h = '';
-    h += fila('Avisos por mail', c.mail ? 'Activos' : 'Pausados', c.mail ? 'on' : 'off');
+    var mailTxt = c.mail ? 'Activos'
+      : (reciénConfirmado() ? 'Activando…' : 'Pausados');
+    h += fila('Avisos por mail', mailTxt, c.mail ? 'on' : (reciénConfirmado() ? 'warn' : 'off'));
     var w = estadoWaTxt(c);
     h += fila('Avisos por WhatsApp', w.t, w.k);
     if (c.tel && c.tel !== '***') h += fila('Teléfono', esc(c.tel));
@@ -690,6 +730,7 @@
       .then(function (j) {
         b.disabled = false; b.textContent = 'Ya lo mandé · comprobar ahora';
         if (!(j && j.ok && j.cuenta)) return;
+        if (esViejo(j.cuenta)) return;
         ultima = { c: j.cuenta, pago: j.pago || null };
         var e = String(j.cuenta.estado || '');
         // Si ya está, `pintar` lo lleva solo a la pantalla de pago (el estado del
@@ -751,6 +792,7 @@
     post('/cuenta', { token: token, fresco: proximoFresco() })
       .then(function (j) {
         if (!(j && j.ok && j.cuenta)) return;
+        if (esViejo(j.cuenta)) return;
         ultima = { c: j.cuenta, pago: j.pago || null };
         pintar(j.cuenta, j.pago || null);
       })
@@ -778,6 +820,7 @@
       post('/cuenta', { token: token })
         .then(function (j) {
           if (!(j && j.ok && j.cuenta)) return;                     // hipo transitorio: se reintenta solo
+          if (esViejo(j.cuenta)) return;                            // llegó tarde una copia vieja
           ultima = { c: j.cuenta, pago: j.pago || null };
           var estado = String(j.cuenta.estado || '');
           if (j.cuenta.ws || estado === 'verificado') {
@@ -808,6 +851,7 @@
       post('/cuenta', { token: token })
         .then(function (j) {
           if (!(j && j.ok && j.cuenta)) return;       // hipo: se reintenta solo
+          if (esViejo(j.cuenta)) return;              // copia vieja: no repintar para atrás
           ultima = { c: j.cuenta, pago: j.pago || null };
           if (j.cuenta.mail) pararPendiente();         // pasó a Activos: cortamos
           pintar(j.cuenta, j.pago || null);            // repinta (y refleja el cambio)
@@ -824,6 +868,10 @@
     post('/cuenta', { token: t })
       .then(function (j) {
         if (j && j.ok && j.cuenta) {
+          // Se REGISTRA la versión (para que una copia más vieja que llegue después
+          // no pise esto) pero se pinta siempre: es la primera carga y si acá no se
+          // pinta, la persona se queda mirando el login.
+          esViejo(j.cuenta);
           ultima = { c: j.cuenta, pago: j.pago || null };
           pintar(j.cuenta, j.pago || null);
         }
