@@ -100,6 +100,31 @@
     .then(function (r) { return r.json(); })
     .then(function (j) {
       if (j && j.ok) {
+        // ⚡ AUTO-LOGIN (25/07/2026). Si el Worker mandó sesión, este click ya
+        // demostró que la casilla es suya: se guarda y se la lleva ADENTRO de su
+        // cuenta, en vez de pedirle la misma prueba otra vez.
+        //
+        // ⚠️ POR QUÉ IMPORTA TANTO EN EL CELULAR: este link se abre casi siempre
+        // en el navegador EMBEBIDO del cliente de correo. Ahí "andá a Mi cuenta y
+        // fijate el código que te mandamos por mail" es un callejón sin salida —
+        // para leer el código hay que salir del webview, y al salir se pierde la
+        // pantalla donde había que escribirlo. Con la sesión hecha, no hay nada
+        // que ir a buscar.
+        //
+        // ⚠️ La caja de "Activar WhatsApp" NO se pierde: está en `cuenta.html`, o
+        // sea que la oferta pasa de un botón que llevaba a un muro de login a uno
+        // que se puede completar en el acto. Se mueve, no se saca.
+        if (j.sesion) {
+          try { localStorage.setItem('rp_sesion', j.sesion); } catch (e) { /* modo privado */ }
+          caja.className = 'caja bien';
+          t.textContent = '¡Listo! Ya estás suscripto';
+          p.innerHTML = 'Te vamos a avisar <b>por mail, gratis</b>, cuando el río se salga de lo '
+            + 'normal.<br><br>Te estamos abriendo tu cuenta…';
+          setTimeout(function () { location.replace('/cuenta.html'); }, 1400);
+          return;
+        }
+
+        // Sin sesión (link viejo, o pasadas las 48 h): el camino de antes.
         caja.className = 'caja bien';
         t.textContent = 'Suscripción confirmada';
         p.innerHTML = 'Vas a recibir los avisos <b>por mail, gratis</b> — cuando el río se salga de lo normal en San Fernando y el Delta. Crecientes y bajantes fuertes, nada más que eso.';
