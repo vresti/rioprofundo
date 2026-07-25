@@ -141,6 +141,13 @@
      Ser estado-driven la hace resistente a recargas: la persona puede cerrar y
      volver en cualquier punto y la página la ubica donde estaba.
 
+     ⚠️ EL ESTADO DEL SERVIDOR MANDA SOBRE `vista` (24/07/2026). `vista` es lo
+     que la persona eligió recién y sólo puede ADELANTAR la pantalla, nunca
+     retenerla: si el espejo dice `verificado`, se muestra el pago aunque
+     `vista` diga otra cosa. Con el orden al revés, la pantalla se quedaba
+     clavada en "Esperando tu mensaje…" con el trámite ya hecho — y de ahí
+     salía "el cliente piensa que es gratis". Ver `pintarActivacion`.
+
      ⚠️ Los fetch mandan Content-Type: text/plain A PROPÓSITO. Así el pedido es
      "simple" para CORS y el navegador NO dispara el preflight OPTIONS. Mismo
      truco que el formulario de alta de index.html. -->
@@ -358,6 +365,7 @@
     // ⚠️ Sin esto, el refresco al volver a la pestaña (`alVolver`) repintaría la
     // cuenta de alguien que acaba de cerrar sesión.
     token = null; vista = null; ultima = { c: null, pago: null }; ultimaCaja = '';
+    waLocal = { link: '', cod: '' };
     $('email').value = ''; $('codigo').value = '';
     ver('p1');
   });
@@ -448,7 +456,7 @@
       // diciendo `verificado`. Peor: el vigía del mail repinta cada 5 s y
       // repintaba PARA ATRÁS, porque honraba `vista` igual.
       // Con el estado primero, CUALQUIER repintado sana la pantalla solo.
-      if (estado === 'verificado') { vista = null; mostrar = 'actPago'; }
+      if (estado === 'verificado') { vista = null; waLocal = { link: '', cod: '' }; mostrar = 'actPago'; }
       else if (vista === 'form') mostrar = 'actForm';
       else if (vista === 'espera' || estado === 'verificando' || estado === 'otro_numero') mostrar = 'actEspera';
       else mostrar = 'actBoton';
@@ -501,8 +509,14 @@
    * silencio — es el caso que antes se moría callado.
    */
   function pintarWa(c) {
-    var link = String(c.wa || '');
-    var cod = String(c.wa_cod || '');
+    // ⚠️ EL LINK LOCAL GANA CUANDO EL ESPEJO TODAVÍA NO LO TIENE (25/07/2026).
+    // Desde el link instantáneo, el botón llega en la respuesta de `/activar` y
+    // el espejo se enterá un rato después. Si acá se mirara sólo `c.wa`, el
+    // primer poll (5 s) traería `wa:''` y **le borraría el botón en la cara**.
+    // `waLocal` es lo que el Worker ya nos dio: sobrevive hasta que el espejo lo
+    // confirme o hasta que la verificación cierre.
+    var link = String(c.wa || waLocal.link || '');
+    var cod = String(c.wa_cod || waLocal.cod || '');
     var hay = link.indexOf('https://wa.me/') === 0;
     var otro = String(c.estado || '') === 'otro_numero';
 
@@ -569,8 +583,11 @@
       .then(function (j) {
         $('bContinuar').disabled = false; $('bContinuar').textContent = 'Continuar';
         if (j && (j.ok || j.esperar)) {
-          // El botón todavía no está: lo trae el espejo en ~1 min. La caja de
-          // espera muestra "preparando" hasta que aparezca.
+          // ⚡ EL BOTÓN VIENE EN ESTA MISMA RESPUESTA (25/07/2026). El Worker
+          // emite el código y arma el link, así que no hay nada que esperar: el
+          // "Preparando tu enlace…" queda sólo como respaldo para el caso de que
+          // falte `WS_NUMERO` en Config (ahí el link llega por el espejo, como antes).
+          if (j.wa) { waLocal = { link: String(j.wa), cod: String(j.wa_cod || '') }; }
           vista = 'espera';
           pollN = 0;
           refrescarVista();
@@ -592,6 +609,7 @@
 
   var ultima = { c: null, pago: null };
   var ultimaCaja = '';      // qué caja se mostró la vez anterior (para el scroll)
+  var waLocal = { link: '', cod: '' };   // el link que ya nos dio el Worker (ver pintarWa)
   function refrescarVista() { if (ultima.c) pintarActivacion(ultima.c, ultima.pago); }
 
   /**
