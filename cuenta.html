@@ -174,8 +174,25 @@
 
 <div class="caja">
 
+  <!-- ---------- PASO 0: preparando la cuenta (26/07/2026) ----------
+       ⚠️ POR QUÉ EXISTE ESTA PANTALLA. Desde que el mail de confirmación sale del
+       Worker (~3 s en vez de ~1 min), la persona puede clickear el link ANTES de
+       que GAS haya escrito su fila y publicado el espejo — el drenaje corre cada
+       minuto. Sin esto, `/cuenta` devolvía "Sin datos", la página BORRABA la sesión
+       y la dejaba en el login diciendo "no encontramos datos de esa cuenta", justo
+       después de haber hecho todo bien. Y como el auto-login es de un solo uso,
+       volver a clickear el mail tampoco la salvaba.
+       ⚠️ La carrera existía desde el 25/07: era imposible de ganar porque el mail
+       tardaba un minuto. Acelerar el correo la volvió alcanzable. -->
+  <div id="p0" class="oculto">
+    <h1>Preparando tu cuenta</h1>
+    <p class="sub">Ya confirmamos tu mail. Estamos terminando de crear tu cuenta —
+      esto tarda unos segundos y la pantalla se actualiza sola.</p>
+    <div id="aviso0" class="aviso oculto"></div>
+  </div>
+
   <!-- ---------- PASO 1: mail ---------- -->
-  <div id="p1">
+  <div id="p1" class="oculto">
     <h1>Mi cuenta</h1>
     <p class="sub">Poné el mail con el que te registrás en Río Profundo y te mandamos un código para entrar. No hace falta contraseña.</p>
     <form id="fMail">
@@ -333,7 +350,7 @@
   // cuanto activa o a los ~2 min. Timer propio para no chocar con el de WhatsApp.
 
   function ver(paso) {
-    ['p1','p2','p3'].forEach(function (p) { $(p).classList.toggle('oculto', p !== paso); });
+    ['p0','p1','p2','p3'].forEach(function (p) { $(p).classList.toggle('oculto', p !== paso); });
   }
   function aviso(id, clase, texto) {
     var e = $(id); e.className = 'aviso ' + clase; e.textContent = texto;
@@ -969,34 +986,94 @@
     if (hayQueEsperar(c)) empezarPoll(); else pararPoll();
   }
 
+  /**
+   * ⚠️⚠️ "SIN DATOS" NO SIGNIFICA LO MISMO SIEMPRE, Y ESA DISTINCIÓN ES TODO ESTE
+   * BLOQUE (26/07/2026).
+   *
+   *   · Recién confirmado  -> la fila TODAVÍA no existe. GAS la escribe en su
+   *                           corrida del minuto. Hay que ESPERAR, no rendirse.
+   *   · En cualquier otro  -> la cuenta no está. Ahí sí, al login.
+   *     momento
+   *
+   * Antes se trataban igual y se **borraba la sesión** en los dos casos. Con el
+   * mail de confirmación saliendo en ~3 s (tramo 2 de Resend), la persona clickea
+   * antes de que exista su fila y caía en la rama equivocada: perdía la sesión
+   * recién creada, y como el auto-login es de UN SOLO USO, volver al mail tampoco
+   * la rescataba. Terminaba en el login leyendo "no encontramos datos de esa
+   * cuenta" **inmediatamente después de haber hecho todo bien**.
+   *
+   * ⚠️ La sesión NO se borra mientras estemos esperando: es lo único que la persona
+   * tiene para entrar, y todavía es válida — lo que falta es la fila, no la sesión.
+   */
+  var esperandoAlta = 0;
+  var ESPERA_ALTA_MAX = 40;          // 40 × 3 s = 2 min, holgado contra el trigger de 1 min
+
   function cargar(t) {
     token = t;
     post('/cuenta', { token: t })
       .then(function (j) {
         if (j && j.ok && j.cuenta) {
+          esperandoAlta = 0;
           // Se REGISTRA la versión (para que una copia más vieja que llegue después
           // no pise esto) pero se pinta siempre: es la primera carga y si acá no se
           // pinta, la persona se queda mirando el login.
           esViejo(j.cuenta);
           ultima = { c: j.cuenta, pago: j.pago || null };
           pintar(j.cuenta, j.pago || null);
+          return;
         }
-        else {
-          // Sesión vencida o espejo sin datos: se vuelve al login sin drama.
-          try { localStorage.removeItem(LLAVE); } catch (e) {}
-          ver('p1');
-          if (j && j.msg === 'Sin datos') {
-            aviso('aviso1', 'mal', 'No encontramos datos de esa cuenta. Escribinos a info@rioprofundo.com.');
+
+        // La fila todavía no está, pero venimos del link del mail: es la carrera
+        // contra el drenaje de GAS, no una cuenta inexistente.
+        if (j && j.msg === 'Sin datos' && reciénConfirmado() && esperandoAlta < ESPERA_ALTA_MAX) {
+          esperandoAlta++;
+          ver('p0');
+          // Recién a la mitad de la espera se dice algo: antes de eso el "esto
+          // tarda unos segundos" del panel ya alcanza, y avisar de más asusta.
+          if (esperandoAlta === Math.floor(ESPERA_ALTA_MAX / 2)) {
+            aviso('aviso0', 'bien', 'Está tardando un poco más de lo normal. Tu suscripción ya '
+              + 'quedó confirmada — si esta pantalla no cambia, entrá de nuevo desde Mi cuenta '
+              + 'en un minuto.');
           }
+          setTimeout(function () { cargar(t); }, 3000);
+          return;
+        }
+
+        // Sesión vencida, cuenta inexistente, o se agotó la espera: al login.
+        try { localStorage.removeItem(LLAVE); } catch (e) {}
+        ver('p1');
+        if (j && j.msg === 'Sin datos') {
+          aviso('aviso1', 'mal', 'No encontramos datos de esa cuenta. Escribinos a info@rioprofundo.com.');
         }
       })
-      .catch(function () { ver('p1'); aviso('aviso1', 'mal', 'No se pudo conectar.'); });
+      // ⚠️ Un hipo de red mientras esperamos el alta NO puede costar la sesión:
+      // se reintenta igual, con el mismo tope.
+      .catch(function () {
+        if (reciénConfirmado() && esperandoAlta < ESPERA_ALTA_MAX) {
+          esperandoAlta++; ver('p0');
+          setTimeout(function () { cargar(t); }, 3000);
+          return;
+        }
+        ver('p1'); aviso('aviso1', 'mal', 'No se pudo conectar.');
+      });
   }
 
   // ---------- arranque: si hay sesión, no se ve el login ----------
+  //
+  // ⚠️ `p1` arranca OCULTO en el HTML (26/07/2026). Antes era el panel visible por
+  // defecto, así que con sesión guardada se veía **parpadear el login** mientras
+  // resolvía `/cuenta`, aunque todo funcionara. El login se muestra sólo cuando de
+  // verdad hace falta: sin sesión, o cuando `cargar` se rinde.
   var guardado = null;
   try { guardado = localStorage.getItem(LLAVE); } catch (e) {}
-  if (guardado) { cargar(guardado); } else { ver('p1'); }
+  if (guardado) {
+    // Viniendo del link del mail ya sabemos que puede haber que esperar la fila:
+    // se muestra "Preparando tu cuenta" de entrada en vez de una tarjeta en blanco.
+    if (vieneDeConfirmar) ver('p0');
+    cargar(guardado);
+  } else {
+    ver('p1');
+  }
 })();
 </script>
 </body>
