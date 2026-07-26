@@ -114,29 +114,50 @@
         // ⚠️ La caja de "Activar WhatsApp" NO se pierde: está en `cuenta.html`, o
         // sea que la oferta pasa de un botón que llevaba a un muro de login a uno
         // que se puede completar en el acto. Se mueve, no se saca.
+        // ⚠️⚠️ ESTA PANTALLA TERMINA ACÁ. NO REDIRIGE. (26/07/2026)
+        //
+        // Hasta hoy, si había sesión esto decía "Te estamos abriendo tu cuenta…" y
+        // saltaba a `cuenta.html`. Parecía una mejora y era lo contrario: **el click
+        // en el link YA ES la prueba**, o sea que en este instante ya sabemos todo
+        // lo que importa — la casilla es suya y el mail está confirmado. Lo que
+        // faltaba era contabilidad NUESTRA (que GAS escriba la fila, que el espejo
+        // publique), y por esperarla se lo dejaba mirando carteles **~2 minutos**
+        // para contarle algo que ya sabíamos.
+        //
+        // Victor lo puso mejor que yo: *"comprobamos el mail y a otra cosa"*. El
+        // cliente es más importante que nuestra plomería.
+        //
+        // ⚠️ EL AUTO-LOGIN NO SE PIERDE, SE USA BIEN. La sesión se guarda igual —
+        // su valor nunca fue *aterrizar* en la cuenta, sino que el botón de abajo
+        // **no choque contra un muro de login**, que es el callejón del celular:
+        // este link se abre casi siempre en el navegador EMBEBIDO del correo, y
+        // ahí "andá a leer el código que te mandamos" no tiene salida. Con la
+        // sesión hecha, el botón entra derecho. Y como entra cuando ÉL quiere,
+        // para entonces GAS ya se puso al día solo.
         if (j.sesion) {
           try { localStorage.setItem('rp_sesion', j.sesion); } catch (e) { /* modo privado */ }
-          caja.className = 'caja bien';
-          t.textContent = '¡Listo! Ya estás suscripto';
-          p.innerHTML = 'Te vamos a avisar <b>por mail, gratis</b>, cuando el río se salga de lo '
-            + 'normal.<br><br>Te estamos abriendo tu cuenta…';
-          // `?nuevo=1`: le dice a la cuenta que la confirmación ACABA de pasar, así
-          // muestra "Activando…" en vez de "Pausados" mientras el espejo se pone al
-          // día. Recién confirmado, "Pausados" es directamente falso.
-          setTimeout(function () { location.replace('/cuenta.html?nuevo=1'); }, 1400);
-          return;
         }
 
-        // Sin sesión (link viejo, o pasadas las 48 h): el camino de antes.
         caja.className = 'caja bien';
         t.textContent = 'Suscripción confirmada';
-        p.innerHTML = 'Vas a recibir los avisos <b>por mail, gratis</b> — cuando el río se salga de lo normal en San Fernando y el Delta. Crecientes y bajantes fuertes, nada más que eso.';
+        // ⚠️ "Listo, no tenés que hacer nada más" es la frase que cierra el trámite.
+        // Sin ella la persona queda esperando un paso siguiente que no existe — que
+        // es exactamente lo que hacía la versión anterior, y encima con un cartel de
+        // "estamos abriendo tu cuenta" que la dejaba mirando la plomería.
+        p.innerHTML = '<b>Listo: ya estás suscripto y no tenés que hacer nada más.</b><br><br>'
+          + 'Vas a recibir los avisos <b>por mail, gratis</b> — cuando el río se salga de lo '
+          + 'normal en San Fernando y el Delta. Crecientes y bajantes fuertes, nada más que eso.';
         var wa = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.05 4.91A9.816 9.816 0 0 0 12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21h.004c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01zM12.04 20.15h-.004c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.264 8.264 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.82 2.42a8.183 8.183 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.42-.56-.43-.14-.01-.31-.01-.48-.01-.17 0-.43.06-.66.31-.23.25-.87.85-.87 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.17-.47-.29z"/></svg>';
         var cta = document.createElement('div');
         cta.className = 'cta';
         cta.innerHTML =
             '<p class="q">¿Querés que además te avisemos por <b>WhatsApp</b>? Te llega al toque, sin abrir el mail.</p>'
-          + '<a class="btn-ws" href="/cuenta.html">' + wa + 'Quiero los avisos por WhatsApp</a>'
+          // ⚠️ `?nuevo=1` sigue viajando aunque ya no redirijamos solos: si toca este
+          // botón en el acto, `cuenta.html` sabe que la confirmación ACABA de pasar y
+          // muestra "Preparando tu cuenta" en vez de tirarlo al login por no encontrar
+          // todavía la fila (la carrera contra el drenaje de GAS). Es la red, no el
+          // camino principal: lo normal es que toque después y GAS ya esté al día.
+          + '<a class="btn-ws" href="/cuenta.html?nuevo=1">' + wa + 'Quiero los avisos por WhatsApp</a>'
           + '<p class="note">Servicio aparte · pago único anual · lo activás desde Mi cuenta</p>'
           + '<a class="sec" href="/">Ir a Río Profundo</a>';
         caja.appendChild(cta);
