@@ -240,6 +240,12 @@
   .ley-fila.prono b { color: var(--espuma); font-weight: 600; }
   .ley-fila.prono .ec { color: var(--niebla); font-style: normal; font-weight: 400; }
   .ley-fila.prono .ext-etq { font-weight: 600; }
+  /* Mañana: mismo lenguaje que la fila de extremos, un tono más apagado — es un
+     pronóstico, no una medición, y no tiene que competir con el número grande. */
+  .ley-fila.manana { color: var(--niebla); }
+  .ley-fila.manana b { color: var(--espuma); font-weight: 600; }
+  .ley-fila.manana .m-etq { color: var(--ambar); font-weight: 600; }
+  .ley-fila.manana .ec { font-style: normal; font-weight: 400; }
 
   /* ---- Compactación en celular (menos aire, menos renglones) ---- */
   @media (max-width: 560px) {
@@ -840,6 +846,23 @@ function render(d, esCache) {
     items.sort((a, b) => a.e.t - b.e.t);   // orden cronológico: el que ocurra primero, primero
     pronoCompactoHtml = `<div class="ley-fila prono">${items.map(it => extremoSpan(it.e, it.flecha, it.etq, it.color)).join('')}</div>`;
   }
+  // ---- MAÑANA: el máximo previsto, con su rango (19/09/2026).
+  // Sale de la perspectiva del SHN + la astronómica de mañana. Validado sobre
+  // 60 días: el máximo diario se predice con MAE 0,17 m y sin sesgo, y la banda
+  // de ±0,35 m cubre el 92 % de los días — de ahí el "9 de cada 10".
+  // Se publica el RANGO, no el número solo: el número solo sería más lindo y
+  // menos cierto.
+  // ⚠️ SÓLO EL MÁXIMO. El mismo método sobre el mínimo se queda 21 cm arriba y
+  //    pierde la mitad de las bajantes; publicarlo sería inventar.
+  // Si el backend no tiene dato manda {ok:false, motivo} y acá no se muestra
+  // nada: el motivo queda en el JSON, que es donde se mira cuando algo se apaga.
+  const _mn = d.manana;
+  const mananaHtml = (_mn && _mn.ok && _mn.desde_m != null)
+    ? `<div class="ley-fila manana" title="Pronóstico del SHN sobre la marea astronómica. El máximo real cae dentro de este rango 9 de cada 10 días.">`
+      + `<span><span class="m-etq">▲&nbsp;mañana ${_mn.fecha_txt || ''}</span> `
+      + `<b>entre ${_mn.desde_m.toFixed(2)} y ${_mn.hasta_m.toFixed(2)}&nbsp;m</b> `
+      + `<i class="ec">máximo cerca de las ${_mn.hora_pico}&nbsp;hs</i></span></div>`
+    : '';
   // Leyenda del punto rojo: solo si hay algún cruce DENTRO de la ventana dibujada.
   const _mar = (d.marea || []).filter(p => p.h != null);
   const _t0 = _mar.length ? _mar[0].t : 0, _t1 = _mar.length ? _mar[_mar.length - 1].t : 0;
@@ -880,6 +903,7 @@ function render(d, esCache) {
       </div>
       ${crucesLeyendaHtml}
       ${pronoCompactoHtml}
+      ${mananaHtml}
     </div>
 
     <div class="instrumentos">
