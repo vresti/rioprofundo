@@ -246,6 +246,8 @@
   .ley-fila.manana b { color: var(--espuma); font-weight: 600; }
   .ley-fila.manana .m-etq { color: var(--ambar); font-weight: 600; }
   .ley-fila.manana .ec { font-style: normal; font-weight: 400; }
+  /* La hora, adentro del rótulo gris, en blanco: es dato, no acompañamiento. */
+  .ley-fila.manana .ec b { color: var(--espuma); font-weight: 600; }
 
   /* ---- Compactación en celular (menos aire, menos renglones) ---- */
   @media (max-width: 560px) {
@@ -861,7 +863,10 @@ function render(d, esCache) {
     ? `<div class="ley-fila manana" title="Pronóstico del SHN sobre la marea astronómica. El máximo real cae dentro de este rango 9 de cada 10 días.">`
       + `<span><span class="m-etq">▲&nbsp;mañana ${_mn.fecha_txt || ''}</span> `
       + `<b>entre ${_mn.desde_m.toFixed(2)} y ${_mn.hasta_m.toFixed(2)}&nbsp;m</b> `
-      + `<i class="ec">máximo cerca de las ${_mn.hora_pico}&nbsp;hs</i></span></div>`
+      // La HORA va en blanco, igual que la altura: son los dos datos que se leen.
+      // Gris queda sólo "máximo cerca de las", que es rótulo y no dato — el mismo
+      // criterio que la fila de pleamar/bajamar de arriba.
+      + `<i class="ec">máximo cerca de las <b>${_mn.hora_pico}&nbsp;hs</b></i></span></div>`
     : '';
   // Leyenda del punto rojo: solo si hay algún cruce DENTRO de la ventana dibujada.
   const _mar = (d.marea || []).filter(p => p.h != null);
