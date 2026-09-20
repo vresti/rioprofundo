@@ -868,6 +868,30 @@ function render(d, esCache) {
   // Si el backend no tiene dato manda {ok:false, motivo} y acá no se muestra
   // nada: el motivo queda en el JSON, que es donde se mira cuando algo se apaga.
   const _mn = d.manana;
+  // ⚠️⚠️ LA HORA DEL PICO ES LA ASTRONÓMICA, Y ESO NO TIENE ARREGLO ACÁ (#34,
+  // 20/09/2026). El backend suma al máximo astronómico un residual que es UNA
+  // CONSTANTE para todo el día, y sumar una constante no mueve el argmax: la
+  // hora publicada sólo puede ser la de la pleamar astronómica.
+  //
+  // Medido sobre 79 días (máximo real vs astronómico): mediana +6 min, media
+  // +19, sd 72, p10/p90 -56/+123. O sea SIN SESGO pero CON RUIDO: cae dentro de
+  // ±30 min apenas el 52 % de los días, y se corre más de media hora tarde el
+  // 35 %. Publicar "01:15", con minutos, promete una precisión que no existe.
+  //
+  // ⚠️ Se probó usar la tendencia del residual del SHN (`fin - ini`, que dice si
+  // sube o baja durante el día) para anticipar hacia qué lado se corre:
+  // r = -0,124 sobre 40 días, y los grupos "sube"/"baja" son indistinguibles.
+  // HIPÓTESIS DESCARTADA CON EL DATO, no por opinión.
+  //
+  // Por eso: se redondea a la media hora y el texto dice "alrededor de".
+  // El JSON sigue trayendo `hora_pico` exacta - esto es presentación, no dato.
+  const _mnHora = (hhmm) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm == null ? '' : hhmm));
+    if (!m) return String(hhmm == null ? '' : hhmm);
+    let t = Math.round(((+m[1]) * 60 + (+m[2])) / 30) * 30;
+    t = ((t % 1440) + 1440) % 1440;   // 23:50 redondea a 24:00 -> 00:00
+    return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+  };
   // El centro y la banda vienen del backend (`max_m`, `banda_m`). El fallback
   // los deriva de desde/hasta por si alguna vez se sirve un JSON más viejo:
   // así un cambio de orden en los deploys no apaga el cartel.
@@ -876,7 +900,7 @@ function render(d, esCache) {
   const _mnBanda = (_mn && _mn.banda_m != null) ? _mn.banda_m
     : (_mn && _mn.desde_m != null && _mn.hasta_m != null) ? (_mn.hasta_m - _mn.desde_m) / 2 : null;
   const mananaHtml = (_mn && _mn.ok && _mnMax != null && _mnBanda != null)
-    ? `<div class="ley-fila manana" title="Pronóstico del SHN sobre la marea astronómica. El máximo real cae dentro de esta banda 9 de cada 10 días.">`
+    ? `<div class="ley-fila manana" title="Pronóstico del SHN sobre la marea astronómica. El máximo real cae dentro de esta banda 9 de cada 10 días. La hora es la de la pleamar astronómica: el pico real cae dentro de la media hora aproximadamente la mitad de los días, y puede correrse una o dos.">`
       + `<span><span class="m-etq">▲&nbsp;mañana ${_mn.fecha_txt || ''}</span> `
       // ⚠️ Todo el grupo va con &nbsp;: en mobile, "1.45 ±" y "0.35 m" en
       //    renglones distintos se leen como dos cosas y el ± pierde sentido.
@@ -884,7 +908,7 @@ function render(d, esCache) {
       // La HORA va en blanco, igual que la altura: son los dos datos que se leen.
       // Gris queda sólo "máximo cerca de las", que es rótulo y no dato — el mismo
       // criterio que la fila de pleamar/bajamar de arriba.
-      + `<i class="ec">máximo cerca de las <b>${_mn.hora_pico}&nbsp;hs</b></i></span></div>`
+      + `<i class="ec">máximo alrededor de las <b>${_mnHora(_mn.hora_pico)}&nbsp;hs</b></i></span></div>`
     : '';
   // Leyenda del punto rojo: solo si hay algún cruce DENTRO de la ventana dibujada.
   const _mar = (d.marea || []).filter(p => p.h != null);
