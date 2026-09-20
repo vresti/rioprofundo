@@ -852,17 +852,35 @@ function render(d, esCache) {
   // Sale de la perspectiva del SHN + la astronómica de mañana. Validado sobre
   // 60 días: el máximo diario se predice con MAE 0,17 m y sin sesgo, y la banda
   // de ±0,35 m cubre el 92 % de los días — de ahí el "9 de cada 10".
-  // Se publica el RANGO, no el número solo: el número solo sería más lindo y
-  // menos cierto.
+  // Se publica SIEMPRE con su incertidumbre, nunca el número pelado: el número
+  // solo sería más lindo y menos cierto.
+  // ⚠️ 20/09/2026 — CAMBIÓ LA FORMA, NO EL CONTENIDO. Antes decía "entre 1.10 y
+  //    1.80 m"; ahora dice "1.45 ± 0.35 m", que es la MISMA información escrita
+  //    de otra manera (el centro es el máximo previsto y la banda es la misma).
+  //    Se prefiere esta forma porque deja ver de un golpe cuál es la altura
+  //    esperada y cuánto se puede mover, en vez de dos números sueltos que hay
+  //    que promediar mentalmente.
+  //    ⚠️ El riesgo conocido de esta forma es que el ojo se quede con el centro
+  //    y descarte el "±". Por eso la banda va DENTRO del mismo <b>, en el mismo
+  //    blanco y el mismo peso que el número: no es letra chica.
   // ⚠️ SÓLO EL MÁXIMO. El mismo método sobre el mínimo se queda 21 cm arriba y
   //    pierde la mitad de las bajantes; publicarlo sería inventar.
   // Si el backend no tiene dato manda {ok:false, motivo} y acá no se muestra
   // nada: el motivo queda en el JSON, que es donde se mira cuando algo se apaga.
   const _mn = d.manana;
-  const mananaHtml = (_mn && _mn.ok && _mn.desde_m != null)
-    ? `<div class="ley-fila manana" title="Pronóstico del SHN sobre la marea astronómica. El máximo real cae dentro de este rango 9 de cada 10 días.">`
+  // El centro y la banda vienen del backend (`max_m`, `banda_m`). El fallback
+  // los deriva de desde/hasta por si alguna vez se sirve un JSON más viejo:
+  // así un cambio de orden en los deploys no apaga el cartel.
+  const _mnMax = (_mn && _mn.max_m != null) ? _mn.max_m
+    : (_mn && _mn.desde_m != null && _mn.hasta_m != null) ? (_mn.desde_m + _mn.hasta_m) / 2 : null;
+  const _mnBanda = (_mn && _mn.banda_m != null) ? _mn.banda_m
+    : (_mn && _mn.desde_m != null && _mn.hasta_m != null) ? (_mn.hasta_m - _mn.desde_m) / 2 : null;
+  const mananaHtml = (_mn && _mn.ok && _mnMax != null && _mnBanda != null)
+    ? `<div class="ley-fila manana" title="Pronóstico del SHN sobre la marea astronómica. El máximo real cae dentro de esta banda 9 de cada 10 días.">`
       + `<span><span class="m-etq">▲&nbsp;mañana ${_mn.fecha_txt || ''}</span> `
-      + `<b>entre ${_mn.desde_m.toFixed(2)} y ${_mn.hasta_m.toFixed(2)}&nbsp;m</b> `
+      // ⚠️ Todo el grupo va con &nbsp;: en mobile, "1.45 ±" y "0.35 m" en
+      //    renglones distintos se leen como dos cosas y el ± pierde sentido.
+      + `<b>${_mnMax.toFixed(2)}&nbsp;±&nbsp;${_mnBanda.toFixed(2)}&nbsp;m</b> `
       // La HORA va en blanco, igual que la altura: son los dos datos que se leen.
       // Gris queda sólo "máximo cerca de las", que es rótulo y no dato — el mismo
       // criterio que la fila de pleamar/bajamar de arriba.
