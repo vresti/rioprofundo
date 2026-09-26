@@ -911,8 +911,8 @@ function render(d, esCache) {
       //    renglones distintos se leen como dos cosas y el ± pierde sentido.
       + `<b>${_mnMax.toFixed(2)}&nbsp;±&nbsp;${_mnBanda.toFixed(2)}&nbsp;m</b> `
       // La HORA va en blanco, igual que la altura: son los dos datos que se leen.
-      // Gris queda sólo "máximo alrededor de las", que es rótulo y no dato — el mismo
-      // criterio que la fila de pleamar/bajamar de arriba.
+      // Gris queda sólo el rótulo "máx.", que no es dato — el mismo criterio que la
+      // fila de pleamar/bajamar de arriba.
       + `<i class="ec">máx.&nbsp;<b>${_mnHora(_mn.hora_pico)}&nbsp;hs</b></i></span></div>`
     : '';
   // Leyenda del punto rojo: solo si hay algún cruce DENTRO de la ventana dibujada.
