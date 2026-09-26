@@ -385,6 +385,12 @@
   /* Honeypot: invisible para humanos, tentador para bots. */
   .sus-hp { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
 
+  /* ---- "Qué es esto": texto estático para personas y para buscadores (26/09/2026) ---- */
+  .quees { margin: 28px 0 0; color: var(--niebla); font-size: .88rem; line-height: 1.6; }
+  .quees h2 { font-size: 1rem; color: var(--espuma); font-weight: 600; margin: 0 0 9px; }
+  .quees p { margin: 0 0 9px; }
+  .quees b { color: var(--espuma); font-weight: 600; }
+  .quees .nota { font-size: .8rem; opacity: .82; }
   footer {
     text-align: center; color: var(--niebla); font-size: .7rem;
     margin-top: 28px; letter-spacing: .08em;
@@ -492,6 +498,41 @@
       <div class="compartir-s">Escaneá y mandáselo a quien navegue o viva en la costa.</div>
     </div>
   </div>
+
+  <!-- ==== QUÉ ES ESTO — texto estático (26/09/2026) =========================
+       ⚠️ POR QUÉ EXISTE, para que nadie lo borre por "no suma": sin este bloque
+       la home tenía 88 CARACTERES de texto. Todo lo demás lo inyecta el JS o lo
+       dibuja el <canvas>, y un canvas es invisible para indexar. Search Console
+       al 26/09: 7 clics en 28 días, y las ÚNICAS consultas eran el nombre propio
+       ("río profundo") — el sitio no existía para ninguna pregunta real.
+       ⚠️ NO es relleno de palabras clave: cada afirmación de acá tiene que ser
+       VERDADERA. Si el producto cambia, este texto cambia con él.
+       ⚠️ La última línea (no somos un servicio oficial) no es un trámite legal:
+       quien busca "alerta defensa civil" puede tener el agua entrando. ==== -->
+  <section class="quees">
+    <h2>Altura del río en Tigre, San Fernando y el Delta</h2>
+    <p>
+      Río Profundo mide la <b>altura del Río de la Plata en San Fernando</b>, que es la
+      referencia para la zona de Tigre, el Paseo Victorica y las islas del Delta, y avisa
+      cuando el agua se sale de lo normal.
+    </p>
+    <p>
+      Arriba está el <b>nivel medido</b> con la hora en que se midió, hacia dónde va en las
+      próximas horas, la <b>próxima bajamar y la próxima pleamar</b> con hora y altura, el
+      <b>máximo previsto para mañana</b> con su margen de error, y el viento — que es lo que
+      convierte una marea común en <b>sudestada</b> (crecida) o en <b>bajante</b>.
+    </p>
+    <p>
+      Sirve para decidir cosas concretas: si el agua va a llegar al muelle, cuándo empieza a
+      bajar el río, si conviene esperar antes de salir con la lancha, si hay que subir las
+      cosas antes de la noche. <b>Los avisos por mail son gratis</b>: llegan cuando el río
+      cruza un umbral de crecida o de bajante, y también cuando el episodio termina.
+    </p>
+    <p class="nota">
+      No es un servicio oficial. Los datos vienen del <b>INA</b> y del <b>SHN</b>. Ante una
+      emergencia, la autoridad es <b>Prefectura Naval</b> y <b>Defensa Civil</b>.
+    </p>
+  </section>
 
   <footer>
     rioprofundo.com · datos: INA (a5) + StormGlass + Open-Meteo ·
