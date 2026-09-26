@@ -198,8 +198,6 @@
     transition: transform .6s cubic-bezier(.2,.8,.2,1);
     filter: drop-shadow(0 0 6px rgba(95,212,230,.35));
   }
-  .ahora .meta { text-align: right; font-size: .8rem; color: var(--niebla); line-height: 1.7; }
-  .ahora .meta .hora { color: var(--espuma); font-size: 1rem; font-weight: 600; }
 
   .comparacion {
     margin-top: 10px; font-size: clamp(.82rem, 2.4vw, 1rem);
@@ -238,7 +236,6 @@
                  border-bottom: 2px dotted var(--ambar); }
   .ley-fila.prono { color: var(--ambar); }
   .ley-fila.prono b { color: var(--espuma); font-weight: 600; }
-  .ley-fila.prono .ec { color: var(--niebla); font-style: normal; font-weight: 400; }
   .ley-fila.prono .ext-etq { font-weight: 600; }
   /* Mañana: mismo lenguaje que la fila de extremos, un tono más apagado — es un
      pronóstico, no una medición, y no tiene que competir con el número grande. */
@@ -252,9 +249,6 @@
   /* ---- Compactación en celular (menos aire, menos renglones) ---- */
   @media (max-width: 560px) {
     .ahora { margin-bottom: 16px; gap: 10px; }
-    .ahora .meta { line-height: 1.3; }
-    .ahora .meta .hora { font-size: .8rem; }
-    .ahora .meta .cuando { font-size: .72rem; }
     .leyenda { flex-direction: column; gap: 6px; margin-top: 12px; }
     .ley-fila { gap: 14px; }
     .instrumentos { margin-top: 14px; }
@@ -626,15 +620,12 @@ const SPONSOR = {
 })();
 
 const fmtHora = ts => new Date(ts).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false });
-const fmtFecha = ts => new Date(ts).toLocaleDateString('es-AR', { weekday:'short', day:'numeric', month:'short' });
-// Antigüedad legible de una medición respecto de "ahora" (ts del servidor)
-function haceCuanto(tDato, tAhora) {
-  const min = Math.round((tAhora - tDato) / 60000);
-  if (min < 2) return 'recién';
-  if (min < 60) return 'hace ' + min + ' min';
-  const h = Math.floor(min / 60), m = min % 60;
-  return 'hace ' + h + ' h' + (m ? ' ' + m + ' min' : '');
-}
+// 26/09/2026: `26/09`, no "sáb, 26 sep". Reemplazó a `fmtFecha`, y con el bloque
+// `.meta` se fue también `haceCuanto` ("hace 1 h 32 min"): la hora exacta ya lo dice.
+// ⚠️ A MANO, no con `toLocaleDateString`: con `{day:'2-digit',month:'2-digit'}` el ICU de
+// `es-AR` devuelve `26/9` —sin el cero del mes— en algunos runtimes y `26/09` en otros. El
+// formato de la pantalla no puede depender de la versión de ICU del navegador de cada uno.
+const fmtDiaMes = ts => { const f = new Date(ts); return String(f.getDate()).padStart(2,'0') + '/' + String(f.getMonth()+1).padStart(2,'0'); };
 // Grados meteorológicos (de dónde viene) -> rumbo náutico
 function rumbo(theta) {
   const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
@@ -769,14 +760,24 @@ function render(d, esCache) {
   const valorGrande = hayPresente ? estimAhora : nivelActual;
 
   let etiquetaGrande, medidoTxt;
+  // ---- EL SELLO DE LA MEDICIÓN, EN UNA SOLA LÍNEA (26/09/2026) ----
+  // Antes lo mismo estaba dicho en tres pedazos y en dos lugares de la pantalla:
+  // "último medido · 1,96 m" acá, y a la derecha un bloque `.meta` con
+  // "Medido a las 07:45 hs" + "sáb, 26 sep · hace 1 h 32 min". El valor y la hora
+  // aparecían dos veces, y el "hace 1 h 32 min" no agrega nada que la hora no diga.
+  // Ahora: `Medido: 1,96 m 07:45 hs 26/09`.
+  const selloMedido = (horaActual != null)
+    ? `${fmtHora(horaActual)}&nbsp;hs ${fmtDiaMes(horaActual)}`
+    : '';
   if (hayPresente) {
     etiquetaGrande = `<div class="estimado">calculado ahora${notaActualizando}</div>`;
     medidoTxt = (nivelActual != null)
-      ? `<div class="medido">último medido · <b>${nivelActual.toFixed(2)} m</b></div>`
+      ? `<div class="medido">Medido: <b>${nivelActual.toFixed(2)}&nbsp;m</b> ${selloMedido}</div>`
       : '';
   } else {
+    // Sin presente, el número grande YA ES el medido: no se repite el valor.
     etiquetaGrande = `<div class="estimado" style="opacity:.6">último dato medido${notaActualizando}</div>`;
-    medidoTxt = '';
+    medidoTxt = selloMedido ? `<div class="medido">Medido: ${selloMedido}</div>` : '';
   }
 
   // ---- RÓTULO DESCRIPTIVO: cuánto está el río SOBRE / BAJO la astronómica ----
@@ -825,18 +826,13 @@ function render(d, esCache) {
   // ---- Pronóstico compacto: PRÓXIMOS EXTREMOS (bajamar / pleamar) anclados al
   // EVENTO, no a "+6h" (que se desliza con el reloj y no se puede correlacionar
   // con la navegación ni con el aviso). El backend ya los detecta en d.extremos
-  // (punto de vuelta REAL, no el borde de la ventana). El "en X" lo calculamos
-  // acá desde el t absoluto vs ahora, así queda exacto y se actualiza solo. Si un
-  // lado no tiene vuelta a la vista, viene null y simplemente no se muestra. ----
-  function enCuanto(t) {
-    const min = Math.round((t - d.ts) / 60000);
-    if (min <= 1) return 'ahora';
-    if (min < 60) return 'en ~' + min + ' min';
-    const h = Math.floor(min / 60), m = min % 60;
-    return 'en ~' + h + ' h' + (m >= 8 ? ' ' + m + ' min' : '');
-  }
+  // (punto de vuelta REAL, no el borde de la ventana). Si un lado no tiene vuelta
+  // a la vista, viene null y simplemente no se muestra. ----
+  // ⚠️ 26/09/2026: se fue el "en ~5 h 21 min" que acompañaba a cada extremo, y con
+  //    él la función `enCuanto`, que no tenía otro llamador. La hora absoluta ya
+  //    dice cuándo es, y la cuenta relativa obligaba a leer dos veces lo mismo.
   function extremoSpan(e, flecha, etq, color) {
-    return `<span><span class="ext-etq" style="color:${color}">${flecha}&nbsp;${etq}</span> <b>${fmtHora(e.t)}&nbsp;hs · ${e.valor.toFixed(2)}&nbsp;m</b> <i class="ec">${enCuanto(e.t)}</i></span>`;
+    return `<span><span class="ext-etq" style="color:${color}">${flecha}&nbsp;${etq}</span> <b>${fmtHora(e.t)}&nbsp;hs · ${e.valor.toFixed(2)}&nbsp;m</b></span>`;
   }
   const _ex = d.extremos;
   let pronoCompactoHtml = '';
@@ -883,7 +879,12 @@ function render(d, esCache) {
   // r = -0,124 sobre 40 días, y los grupos "sube"/"baja" son indistinguibles.
   // HIPÓTESIS DESCARTADA CON EL DATO, no por opinión.
   //
-  // Por eso: se redondea a la media hora y el texto dice "alrededor de".
+  // Por eso SE REDONDEA A LA MEDIA HORA, que es la defensa que importa: un "07:30"
+  // no promete los minutos que un "07:15" sí prometería.
+  // ⚠️ 26/09/2026: el texto decía "máximo alrededor de las 07:30 hs" y ahora dice
+  //    "máx. 07:30 hs". El "alrededor de" se fue del renglón; el redondeo y el
+  //    tooltip (que explica el ruido de ±30 min) siguen en pie. Si alguna vez se
+  //    saca el redondeo, esta línea vuelve a necesitar la palabra.
   // El JSON sigue trayendo `hora_pico` exacta - esto es presentación, no dato.
   const _mnHora = (hhmm) => {
     const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm == null ? '' : hhmm));
@@ -901,14 +902,18 @@ function render(d, esCache) {
     : (_mn && _mn.desde_m != null && _mn.hasta_m != null) ? (_mn.hasta_m - _mn.desde_m) / 2 : null;
   const mananaHtml = (_mn && _mn.ok && _mnMax != null && _mnBanda != null)
     ? `<div class="ley-fila manana" title="Pronóstico del SHN sobre la marea astronómica. El máximo real cae dentro de esta banda 9 de cada 10 días. La hora es la de la pleamar astronómica: el pico real cae dentro de la media hora aproximadamente la mitad de los días, y puede correrse una o dos.">`
-      + `<span><span class="m-etq">▲&nbsp;mañana ${_mn.fecha_txt || ''}</span> `
+      // ⚠️ 26/09/2026 — SIN la palabra "mañana". El cartel se arma con la fecha del
+      //    día siguiente, pero el navegador puede estar mirándolo a las 00:30, y ahí
+      //    "mañana dom 27/09" nombra un día que YA ES HOY. La fecha sola no puede
+      //    mentir: dice qué día es y el lector sabe en cuál está.
+      + `<span><span class="m-etq">▲&nbsp;${_mn.fecha_txt || ''}</span> `
       // ⚠️ Todo el grupo va con &nbsp;: en mobile, "1.45 ±" y "0.35 m" en
       //    renglones distintos se leen como dos cosas y el ± pierde sentido.
       + `<b>${_mnMax.toFixed(2)}&nbsp;±&nbsp;${_mnBanda.toFixed(2)}&nbsp;m</b> `
       // La HORA va en blanco, igual que la altura: son los dos datos que se leen.
       // Gris queda sólo "máximo alrededor de las", que es rótulo y no dato — el mismo
       // criterio que la fila de pleamar/bajamar de arriba.
-      + `<i class="ec">máximo alrededor de las <b>${_mnHora(_mn.hora_pico)}&nbsp;hs</b></i></span></div>`
+      + `<i class="ec">máx.&nbsp;<b>${_mnHora(_mn.hora_pico)}&nbsp;hs</b></i></span></div>`
     : '';
   // Leyenda del punto rojo: solo si hay algún cruce DENTRO de la ventana dibujada.
   const _mar = (d.marea || []).filter(p => p.h != null);
@@ -929,10 +934,6 @@ function render(d, esCache) {
         ${etiquetaGrande}
         ${medidoTxt}
         ${residualTxt}
-      </div>
-      <div class="meta">
-        <div class="hora">Medido a las ${fmtHora(horaActual)} hs</div>
-        <div class="cuando">${fmtFecha(horaActual)} <span style="color:${(d.ts-horaActual)>3*3600000?'var(--ambar)':'var(--niebla)'}">· hace ${haceCuanto(horaActual, d.ts).replace(/^hace /,'')}</span></div>
       </div>
     </div>
 
